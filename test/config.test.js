@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseEnvFile, serializeEnvFile } from '../src/config.js';
+import { mkdtemp, readFile, writeFile, mkdir, stat } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { parseEnvFile, serializeEnvFile, configDir, envFilePath, readProviderEnv, writeProviderEnv, ConfigError } from '../src/config.js';
 
 test('parseEnvFile reads KEY=value, skips comments and blank lines, trims whitespace', () => {
   const text = '# header\n\nANTHROPIC_AUTH_TOKEN=sk-abc\n  WRAPPER_CODE_PROFILE = flash-1m \n';
@@ -30,4 +33,76 @@ test('serializeEnvFile writes a header comment and round-trips through parseEnvF
   assert.ok(text.startsWith('# wrapper-code — deepseek\n'));
   assert.ok(text.endsWith('\n'));
   assert.deepEqual(parseEnvFile(text), values);
+});
+
+test('configDir uses XDG_CONFIG_HOME when set on POSIX', () => {
+  assert.equal(
+    configDir({ platform: 'linux', env: { XDG_CONFIG_HOME: '/xdg' }, home: '/home/u' }),
+    path.join('/xdg', 'wrapper-code'),
+  );
+});
+
+test('configDir falls back to ~/.config on POSIX', () => {
+  assert.equal(
+    configDir({ platform: 'darwin', env: {}, home: '/Users/u' }),
+    path.join('/Users/u', '.config', 'wrapper-code'),
+  );
+});
+
+test('configDir uses APPDATA on Windows', () => {
+  assert.equal(
+    configDir({ platform: 'win32', env: { APPDATA: 'C:\\Users\\u\\AppData\\Roaming' }, home: 'C:\\Users\\u' }),
+    path.join('C:\\Users\\u\\AppData\\Roaming', 'wrapper-code'),
+  );
+});
+
+test('configDir falls back to home/AppData/Roaming on Windows without APPDATA', () => {
+  assert.equal(
+    configDir({ platform: 'win32', env: {}, home: 'C:\\Users\\u' }),
+    path.join('C:\\Users\\u', 'AppData', 'Roaming', 'wrapper-code'),
+  );
+});
+
+test('envFilePath is <configDir>/<provider>.env', () => {
+  const opts = { platform: 'linux', env: {}, home: '/h' };
+  assert.equal(envFilePath('deepseek', opts), path.join('/h', '.config', 'wrapper-code', 'deepseek.env'));
+});
+
+test('readProviderEnv returns {} when the file does not exist', async () => {
+  const home = await mkdtemp(path.join(tmpdir(), 'wc-'));
+  assert.deepEqual(await readProviderEnv('deepseek', { platform: 'linux', env: {}, home }), {});
+});
+
+test('writeProviderEnv creates the dir, writes 0600 and round-trips', async () => {
+  const home = await mkdtemp(path.join(tmpdir(), 'wc-'));
+  const opts = { platform: process.platform === 'win32' ? 'win32' : 'linux', env: {}, home };
+  const file = await writeProviderEnv('deepseek', { ANTHROPIC_AUTH_TOKEN: 'sk-1', WRAPPER_CODE_PROFILE: 'flash-1m' }, opts);
+  assert.equal(file, envFilePath('deepseek', opts));
+  assert.deepEqual(await readProviderEnv('deepseek', opts), { ANTHROPIC_AUTH_TOKEN: 'sk-1', WRAPPER_CODE_PROFILE: 'flash-1m' });
+  if (process.platform !== 'win32') {
+    assert.equal((await stat(file)).mode & 0o777, 0o600);
+    assert.equal((await stat(path.dirname(file))).mode & 0o777, 0o700);
+  }
+});
+
+test('writeProviderEnv overwrites an existing file and keeps 0600', async () => {
+  const home = await mkdtemp(path.join(tmpdir(), 'wc-'));
+  const opts = { platform: process.platform === 'win32' ? 'win32' : 'linux', env: {}, home };
+  await writeProviderEnv('deepseek', { A: '1' }, opts);
+  await writeProviderEnv('deepseek', { B: '2' }, opts);
+  assert.deepEqual(await readProviderEnv('deepseek', opts), { B: '2' });
+});
+
+test('readProviderEnv throws ConfigError naming the file and the setup command on a malformed file', async () => {
+  const home = await mkdtemp(path.join(tmpdir(), 'wc-'));
+  const opts = { platform: 'linux', env: {}, home };
+  const file = envFilePath('deepseek', opts);
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, 'garbage line\n');
+  await assert.rejects(readProviderEnv('deepseek', opts), (err) => {
+    assert.ok(err instanceof ConfigError);
+    assert.match(err.message, /deepseek\.env/);
+    assert.match(err.message, /wrapper-code setup deepseek/);
+    return true;
+  });
 });
