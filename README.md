@@ -1,0 +1,64 @@
+# wrapper-code
+
+Run the [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI harness with other LLM providers, without touching your Claude Code configuration.
+
+`wrapper-code deepseek` opens a normal interactive Claude Code session that talks to DeepSeek. Running `claude` directly still uses Anthropic, exactly as before. Nothing is written under `~/.claude`, and no variable leaks into your shell: the provider settings exist only inside that one session.
+
+## Install
+
+Requires Node.js 18+ and Claude Code (`npm install -g @anthropic-ai/claude-code`).
+
+```bash
+npm install -g wrapper-code
+```
+
+Works on macOS, Linux and Windows.
+
+## Usage
+
+```bash
+wrapper-code deepseek              # launch Claude Code with DeepSeek
+wrapper-code deepseek --resume     # anything after the provider is passed to claude
+wrapper-code setup deepseek        # change the API key or model profile
+wrapper-code list                  # providers and whether they are configured
+```
+
+The first time you launch a provider, a setup page opens in your browser on `127.0.0.1`. Paste your API key, pick a model profile, click **Test and save**. The key is checked against the provider's API before anything is written. Then the session starts right away.
+
+## Providers
+
+| Provider | Profiles | Docs |
+|---|---|---|
+| `deepseek` | `flash-1m` (default): DeepSeek Flash with 1M context. `v4-pro`: DeepSeek V4 Pro as main model, Flash for subagents. | [DeepSeek × Claude Code](https://api-docs.deepseek.com/quick_start/agent_integrations/claude_code/) |
+
+More providers (Qwen Coder, Gemma, Llama, Mistral, local runtimes such as Ollama) are planned. A provider is a single data file in `src/providers/`; pull requests welcome.
+
+## Where things are stored
+
+One file per provider, containing only your choices (key and profile):
+
+- macOS / Linux: `~/.config/wrapper-code/<provider>.env` (or `$XDG_CONFIG_HOME/wrapper-code/`), mode `600`
+- Windows: `%APPDATA%\wrapper-code\<provider>.env`
+
+Model names and the other variables come from the built-in catalog on every launch, so updating `wrapper-code` picks up provider changes without touching your file. Any extra `KEY=value` you add to the file by hand is passed through and overrides the catalog.
+
+## How it works
+
+1. Reads the provider definition (base URL, model variables, how to test a key).
+2. Reads your `<provider>.env`; runs the setup page if the key is missing.
+3. Builds an environment: your shell env + provider vars + profile vars + your file. `ANTHROPIC_API_KEY` is removed so Claude Code cannot fall back to Anthropic auth.
+4. Finds `claude` on your `PATH` and runs it with that environment, forwarding your arguments and its exit code.
+
+Your global `~/.claude` (CLAUDE.md, skills, plugins, MCP servers, history) is shared with the provider session, since only environment variables change.
+
+## Development
+
+```bash
+npm test
+```
+
+Tests never call a real provider API.
+
+## License
+
+MIT
