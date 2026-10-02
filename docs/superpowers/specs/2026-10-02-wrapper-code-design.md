@@ -209,7 +209,11 @@ so Claude Code cannot try Anthropic auth against the provider base URL.
 `src/launch.js` searches each `PATH` entry for `claude`. On Windows it also
 tries each extension in `PATHEXT` (so `claude.cmd` and `claude.exe` are found).
 The resolved absolute path is passed to `spawn` **without** `shell: true`, so
-pass-through args keep their quoting. If nothing is found, exit 1 with:
+pass-through args keep their quoting. Exception: Node 18.20+ refuses to spawn a
+`.cmd`/`.bat` file without a shell on Windows (CVE-2024-27980 fix), so when the
+resolved path ends in `.cmd` or `.bat` the wrapper uses `shell: true` and wraps
+each pass-through arg in double quotes (inner quotes escaped). If nothing is
+found, exit 1 with:
 
 ```
 claude not found on PATH. Install Claude Code: npm install -g @anthropic-ai/claude-code
