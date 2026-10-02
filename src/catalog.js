@@ -20,7 +20,7 @@ export function validateProvider(provider) {
       throw new Error(`${where}: profiles.${pid} needs label and env`);
     }
   }
-  if (!provider.profiles[provider.defaultProfile]) {
+  if (!Object.hasOwn(provider.profiles, provider.defaultProfile)) {
     throw new Error(`${where}: defaultProfile "${provider.defaultProfile}" is not in profiles`);
   }
   if (provider.credential !== null) {

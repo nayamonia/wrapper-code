@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { ConfigError } from '../src/config.js';
 import { buildEnv, derivedEnv, isConfigured } from '../src/env.js';
 import deepseek from '../src/providers/deepseek.js';
 
@@ -57,4 +58,25 @@ test('isConfigured is true only when the credential env is present and non-empty
   assert.equal(isConfigured(deepseek, { ANTHROPIC_AUTH_TOKEN: '' }), false);
   assert.equal(isConfigured(deepseek, { ANTHROPIC_AUTH_TOKEN: 'sk' }), true);
   assert.equal(isConfigured({ ...deepseek, credential: null }, {}), true);
+});
+
+test('buildEnv removes shell vars that reroute Claude Code to another backend', () => {
+  const env = buildEnv({
+    provider: deepseek,
+    fileValues: { ANTHROPIC_AUTH_TOKEN: 'sk' },
+    baseEnv: { CLAUDE_CODE_USE_BEDROCK: '1', CLAUDE_CODE_USE_VERTEX: '1', CLAUDE_CODE_USE_FOUNDRY: '1', PATH: '/bin' },
+  });
+  for (const key of ['CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CODE_USE_FOUNDRY']) {
+    assert.equal(key in env, false, key);
+  }
+  assert.equal(env.PATH, '/bin');
+});
+
+test('unknown profile (including prototype names) is a ConfigError with the setup hint', () => {
+  for (const id of ['ghost', 'constructor']) {
+    assert.throws(
+      () => buildEnv({ provider: deepseek, fileValues: { WRAPPER_CODE_PROFILE: id }, baseEnv: {} }),
+      (err) => err instanceof ConfigError && /wrapper-code setup deepseek/.test(err.message),
+    );
+  }
 });

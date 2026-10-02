@@ -129,13 +129,27 @@
     $('save').disabled = true;
     show('', '');
     post('/save', { credential: $('credential').value, profile: selectedProfile(), baseUrl: $('baseUrl').value })
-      .then(function (res) { return res.json().then(function (body) { return { res: res, body: body }; }); })
+      .then(function (res) {
+        return res.text().then(function (text) {
+          var body;
+          try { body = JSON.parse(text); } catch (e) { body = null; }
+          if (!body || typeof body !== 'object') {
+            body = { ok: false, message: 'HTTP ' + res.status + (res.statusText ? ' ' + res.statusText : '') };
+          }
+          return { res: res, body: body };
+        });
+      })
       .then(function (r) {
         if (r.body.ok) {
           show('ok', 'Done. You can return to the terminal.');
           $('cancel').disabled = true;
         } else {
-          show('err', (r.body.status ? 'HTTP ' + r.body.status + ': ' : '') + r.body.message);
+          var msg = String(r.body.message || 'Request failed');
+          try {
+            var inner = JSON.parse(msg);
+            if (inner && inner.error && typeof inner.error.message === 'string') msg = inner.error.message;
+          } catch (e) { /* not JSON, keep the raw message */ }
+          show('err', (r.body.status ? 'HTTP ' + r.body.status + ': ' : '') + msg);
           $('save').disabled = false;
         }
       })

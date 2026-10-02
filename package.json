@@ -6,7 +6,7 @@
   "bin": { "wrapper-code": "./bin/wrapper-code.js" },
   "files": ["bin", "src", "README.md", "LICENSE"],
   "engines": { "node": ">=18" },
-  "scripts": { "test": "node --test test/*.test.js" },
+  "scripts": { "test": "node --test" },
   "keywords": ["claude-code", "deepseek", "llm", "cli", "wrapper"],
   "license": "MIT"
 }

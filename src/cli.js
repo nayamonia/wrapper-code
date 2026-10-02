@@ -100,7 +100,14 @@ export async function main(argv, deps = {}) {
     const id = (rest[0] || '').toLowerCase();
     const provider = catalog.get(id);
     if (!provider) return unknown(rest[0] || '(missing)');
-    const current = await readProviderEnv(provider.id, cfg);
+    let current;
+    try {
+      current = await readProviderEnv(provider.id, cfg);
+    } catch (err) {
+      if (!(err instanceof ConfigError)) throw err;
+      stderr.write(`Warning: ${err.message}\nThe existing file will be replaced when you save.\n`);
+      current = {};
+    }
     const result = await runSetup(provider, current, setupDeps);
     return result.saved ? 0 : 1;
   }

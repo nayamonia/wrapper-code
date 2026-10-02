@@ -196,17 +196,35 @@ test('list reports a malformed env file as an error row and exits 1', async () =
   assert.match(stdout.text(), /wrapper-code setup deepseek/);
 });
 
-test('setup with a malformed env file rejects with ConfigError before starting the server', async () => {
+test('setup with a malformed env file warns, starts the server with empty current and never prints the raw line', async () => {
   const home = await malformedHome();
-  let started = false;
-  await assert.rejects(
-    main(['setup', 'deepseek'], {
-      stdout: sink(), stderr: sink(), home, env: {}, platform: 'linux',
-      startSetupServerImpl: async () => { started = true; throw new Error('should not start'); },
-    }),
-    (err) => err instanceof ConfigError && /deepseek\.env/.test(err.message),
-  );
-  assert.equal(started, false);
+  let seen;
+  const stderr = sink();
+  const code = await main(['setup', 'deepseek'], {
+    stdout: sink(), stderr, home, env: {}, platform: 'linux',
+    openBrowserImpl: () => {},
+    startSetupServerImpl: async (opts) => {
+      seen = opts;
+      return { url: 'http://x', done: Promise.resolve({ saved: false, reason: 'cancelled' }) };
+    },
+  });
+  assert.equal(code, 1);
+  assert.deepEqual(seen.current, {});
+  assert.match(stderr.text(), /Warning: .*deepseek\.env/);
+  assert.match(stderr.text(), /replaced/);
+});
+
+test('a pasted bare key in the env file is never echoed by list', async () => {
+  const home = await tmp();
+  const cfg = path.join(home, '.config', 'wrapper-code');
+  await mkdir(cfg, { recursive: true });
+  await writeFile(path.join(cfg, 'deepseek.env'), 'sk-SECRET123\n');
+  const stdout = sink();
+  const stderr = sink();
+  const code = await main(['list'], { stdout, stderr, home, env: {}, platform: 'linux' });
+  assert.equal(code, 1);
+  assert.doesNotMatch(stdout.text() + stderr.text(), /SECRET/);
+  assert.match(stdout.text(), /Malformed line 1/);
 });
 
 test('reportFatal prints ConfigError plainly and other errors with a stack', () => {

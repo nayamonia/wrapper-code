@@ -13,7 +13,7 @@ async function fakeApi(status) {
   return { url: `http://127.0.0.1:${server.address().port}/models`, close: () => { server.closeAllConnections(); server.close(); } };
 }
 
-async function boot({ status = 200, current = {}, timeoutMs, fetchImpl, writeEnv, provider = deepseek } = {}) {
+async function boot({ status = 200, current = {}, timeoutMs, credentialTimeoutMs, fetchImpl, writeEnv, provider = deepseek } = {}) {
   const api = await fakeApi(status);
   const written = [];
   const server = await startSetupServer({
@@ -22,6 +22,7 @@ async function boot({ status = 200, current = {}, timeoutMs, fetchImpl, writeEnv
     fetchImpl,
     testUrl: api.url,
     timeoutMs,
+    credentialTimeoutMs,
     writeEnv: writeEnv || (async (values) => { written.push(values); }),
   });
   const post = (route, body, token = server.token) => fetch(`http://127.0.0.1:${server.port}${route}`, {
@@ -216,5 +217,52 @@ test('page payload containing $-replacement patterns is spliced literally', asyn
   const html = await (await fetch(server.url)).text();
   assert.ok(html.includes("https://x/$'"));
   assert.equal(html.split('</html>').length - 1, 1);
+  await stop();
+});
+
+test('POST /save with a prototype-chain profile name is 400', async () => {
+  const { post, stop, written } = await boot();
+  const res = await post('/save', { credential: 'sk', profile: 'constructor' });
+  assert.equal(res.status, 400);
+  assert.equal(written.length, 0);
+  await stop();
+});
+
+test('a credential test that hangs is aborted by credentialTimeoutMs', async () => {
+  const fetchImpl = (url, { signal }) => new Promise((resolve, reject) => {
+    signal.addEventListener('abort', () => reject(new Error('aborted')));
+  });
+  const keepAlive = setTimeout(() => {}, 2000); // AbortSignal.timeout is unref'd
+  const result = await testCredential(deepseek, 'sk', { fetchImpl, timeoutMs: 50 });
+  clearTimeout(keepAlive);
+  assert.equal(result.ok, false);
+  assert.equal(result.status, 0);
+  assert.ok(result.message);
+});
+
+test('POST /save returns 400 and frees the save lock when the provider hangs', async () => {
+  const fetchImpl = (url, { signal }) => new Promise((resolve, reject) => {
+    signal.addEventListener('abort', () => reject(new Error('aborted')));
+  });
+  const api = await boot({ fetchImpl, credentialTimeoutMs: 50 });
+  const res = await api.post('/save', { credential: 'sk', profile: 'flash-1m' });
+  assert.equal(res.status, 400);
+  const res2 = await api.post('/save', { credential: 'sk', profile: 'flash-1m' });
+  assert.equal(res2.status, 400);
+  await api.stop();
+});
+
+test('requests with a bad token do not keep the idle timer alive', async () => {
+  const { server, stop } = await boot({ timeoutMs: 150 });
+  const stopAt = Date.now() + 600;
+  const spam = (async () => {
+    while (Date.now() < stopAt) {
+      await fetch(`http://127.0.0.1:${server.port}/?t=wrong`).catch(() => {});
+      await new Promise((r) => setTimeout(r, 20));
+    }
+  })();
+  const result = await Promise.race([server.done, new Promise((r) => setTimeout(() => r('still-alive'), 450))]);
+  assert.deepEqual(result, { saved: false, reason: 'timeout' });
+  await spam;
   await stop();
 });

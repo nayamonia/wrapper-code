@@ -6,12 +6,12 @@ import { derivedEnv } from '../env.js';
 const PAGE_URL = new URL('./page.html', import.meta.url);
 const MAX_BODY = 64 * 1024;
 
-export async function testCredential(provider, credential, { fetchImpl = globalThis.fetch, testUrl } = {}) {
+export async function testCredential(provider, credential, { fetchImpl = globalThis.fetch, testUrl, timeoutMs = 15000 } = {}) {
   const url = testUrl || provider.test.url;
   const headers = {};
   if (provider.test.auth === 'bearer' && credential) headers.Authorization = `Bearer ${credential}`;
   try {
-    const res = await fetchImpl(url, { method: provider.test.method || 'GET', headers });
+    const res = await fetchImpl(url, { method: provider.test.method || 'GET', headers, signal: AbortSignal.timeout(timeoutMs) });
     if (res.ok) return { ok: true };
     let message = res.statusText || `HTTP ${res.status}`;
     try {
@@ -63,7 +63,7 @@ function pagePayload(provider, current, token) {
       profiles,
     },
     current: {
-      profile: provider.profiles[current.WRAPPER_CODE_PROFILE] ? current.WRAPPER_CODE_PROFILE : provider.defaultProfile,
+      profile: Object.hasOwn(provider.profiles, current.WRAPPER_CODE_PROFILE) ? current.WRAPPER_CODE_PROFILE : provider.defaultProfile,
       hasCredential: Boolean(provider.credential && current[provider.credential.env]),
       baseUrl: current.ANTHROPIC_BASE_URL || provider.env.ANTHROPIC_BASE_URL || '',
     },
@@ -71,7 +71,7 @@ function pagePayload(provider, current, token) {
 }
 
 export async function startSetupServer({
-  provider, current = {}, writeEnv, fetchImpl = globalThis.fetch, testUrl, timeoutMs = 10 * 60 * 1000,
+  provider, current = {}, writeEnv, fetchImpl = globalThis.fetch, testUrl, timeoutMs = 10 * 60 * 1000, credentialTimeoutMs = 15000,
 }) {
   const token = randomBytes(32).toString('hex');
   const template = await readFile(PAGE_URL, 'utf8');
@@ -99,7 +99,6 @@ export async function startSetupServer({
   };
 
   const server = http.createServer(async (req, res) => {
-    touch();
     const url = new URL(req.url, 'http://127.0.0.1');
     const sent = req.headers['x-setup-token'] || url.searchParams.get('t');
     if (sent !== token) {
@@ -107,6 +106,7 @@ export async function startSetupServer({
       res.end();
       return;
     }
+    touch();
 
     if (req.method === 'GET' && url.pathname === '/') {
       const json = JSON.stringify(pagePayload(provider, current, token)).replace(/<\//g, '<\\/');
@@ -140,7 +140,7 @@ export async function startSetupServer({
           return;
         }
         const profile = String(body.profile || '');
-        if (!provider.profiles[profile]) {
+        if (!Object.hasOwn(provider.profiles, profile)) {
           sendJson(res, 400, { ok: false, status: 0, message: `Unknown profile "${profile}"` });
           return;
         }
@@ -157,7 +157,7 @@ export async function startSetupServer({
         if (provider.editableBaseUrl && String(body.baseUrl || '').trim()) {
           values.ANTHROPIC_BASE_URL = String(body.baseUrl).trim();
         }
-        const result = await testCredential(provider, credential, { fetchImpl, testUrl });
+        const result = await testCredential(provider, credential, { fetchImpl, testUrl, timeoutMs: credentialTimeoutMs });
         if (finished) {
           sendJson(res, 409, { ok: false, status: 0, message: 'Setup already finished' });
           return;

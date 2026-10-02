@@ -27,6 +27,10 @@ test('parseEnvFile throws with the line number on a malformed line', () => {
   assert.throws(() => parseEnvFile('BAD KEY=1\n'), /line 1/);
 });
 
+test('parseEnvFile never includes the offending line text in the error', () => {
+  assert.throws(() => parseEnvFile('sk-SECRET123\n'), (err) => /Malformed line 1/.test(err.message) && !err.message.includes('SECRET'));
+});
+
 test('serializeEnvFile writes a header comment and round-trips through parseEnvFile', () => {
   const values = { ANTHROPIC_AUTH_TOKEN: 'sk-abc', WRAPPER_CODE_PROFILE: 'v4-pro' };
   const text = serializeEnvFile(values, { header: 'wrapper-code — deepseek' });

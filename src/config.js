@@ -11,7 +11,7 @@ export function parseEnvFile(text) {
     if (!line || line.startsWith('#')) return;
     const eq = line.indexOf('=');
     const key = eq > 0 ? line.slice(0, eq).trim() : '';
-    if (!KEY_RE.test(key)) throw new Error(`Malformed line ${index + 1}: ${raw}`);
+    if (!KEY_RE.test(key)) throw new Error(`Malformed line ${index + 1}`);
     result[key] = line.slice(eq + 1).trim();
   });
   return result;

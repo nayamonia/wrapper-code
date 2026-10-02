@@ -51,6 +51,12 @@ Model names and the other variables come from the built-in catalog on every laun
 
 Your global `~/.claude` (CLAUDE.md, skills, plugins, MCP servers, history) is shared with the provider session, since only environment variables change.
 
+## Notes
+
+- `~/.claude` is shared, so `env` entries in `~/.claude/settings.json` (and any `apiKeyHelper`) still apply inside the provider session and can override the provider variables. If a session talks to the wrong backend, check there first.
+- Ctrl+C is passed through to `claude`; the wrapper itself keeps running until `claude` exits.
+- If a provider file is broken (for example a pasted bare key), `wrapper-code setup <provider>` replaces it with a fresh one.
+
 ## Development
 
 ```bash
