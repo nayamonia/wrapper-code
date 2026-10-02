@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>wrapper-code setup</title>
+<style>
+  :root { color-scheme: light dark; --bg: #f6f7f9; --card: #fff; --fg: #1b1f24; --muted: #6a737d; --line: #d9dde2; --accent: #2563eb; --ok: #15803d; --err: #b91c1c; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0f1115; --card: #171a21; --fg: #e6e8eb; --muted: #9aa3ad; --line: #2b313b; --accent: #60a5fa; --ok: #4ade80; --err: #f87171; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+  main { max-width: 640px; margin: 40px auto; padding: 0 16px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 24px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  label { display: block; font-weight: 600; margin: 16px 0 6px; }
+  .help { color: var(--muted); font-size: 13px; margin: 4px 0 0; }
+  input[type=text], input[type=password] { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--fg); font-size: 15px; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .row input { flex: 1; }
+  button { padding: 10px 16px; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: var(--fg); cursor: pointer; font-size: 14px; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button:disabled { opacity: .6; cursor: default; }
+  .profile { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 8px; cursor: pointer; }
+  .profile input { margin-top: 4px; }
+  .profile code { color: var(--muted); font-size: 12px; }
+  details { margin-top: 16px; }
+  summary { cursor: pointer; color: var(--muted); }
+  pre { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow: auto; font-size: 12px; }
+  .actions { display: flex; gap: 8px; margin-top: 20px; }
+  .msg { margin-top: 16px; padding: 10px 12px; border-radius: 8px; display: none; }
+  .msg.ok { display: block; background: color-mix(in srgb, var(--ok) 12%, transparent); color: var(--ok); }
+  .msg.err { display: block; background: color-mix(in srgb, var(--err) 12%, transparent); color: var(--err); }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <div class="card">
+    <h1 id="title"></h1>
+    <p class="sub">wrapper-code · <a id="docs" target="_blank" rel="noopener">provider documentation</a></p>
+    <form id="form">
+      <div id="credential-block">
+        <label for="credential" id="credential-label"></label>
+        <div class="row">
+          <input id="credential" type="password" autocomplete="off" spellcheck="false">
+          <button type="button" id="toggle">Show</button>
+        </div>
+        <p class="help" id="credential-help"></p>
+      </div>
+      <div id="baseurl-block" hidden>
+        <label for="baseUrl">Base URL</label>
+        <input id="baseUrl" type="text" autocomplete="off" spellcheck="false">
+      </div>
+      <label>Model profile</label>
+      <div id="profiles"></div>
+      <details>
+        <summary>Advanced: variables that will be injected</summary>
+        <pre id="advanced"></pre>
+      </details>
+      <div class="actions">
+        <button type="submit" class="primary" id="save">Test and save</button>
+        <button type="button" id="cancel">Cancel</button>
+      </div>
+      <div class="msg" id="msg"></div>
+    </form>
+  </div>
+</main>
+<script>
+(function () {
+  var setup = __SETUP_JSON__;
+  var provider = setup.provider, current = setup.current, token = setup.token;
+  var $ = function (id) { return document.getElementById(id); };
+
+  $('title').textContent = provider.name + ' setup';
+  $('docs').href = provider.docs;
+
+  if (provider.credential) {
+    $('credential-label').textContent = provider.credential.label;
+    $('credential-help').textContent = provider.credential.help || '';
+    if (current.hasCredential) $('credential').placeholder = 'already configured, leave blank to keep';
+  } else {
+    $('credential-block').hidden = true;
+  }
+  if (provider.editableBaseUrl) {
+    $('baseurl-block').hidden = false;
+    $('baseUrl').value = current.baseUrl || '';
+  }
+
+  var profilesEl = $('profiles');
+  Object.keys(provider.profiles).forEach(function (id) {
+    var p = provider.profiles[id];
+    var label = document.createElement('label');
+    label.className = 'profile';
+    var radio = document.createElement('input');
+    radio.type = 'radio'; radio.name = 'profile'; radio.value = id; radio.checked = id === current.profile;
+    radio.addEventListener('change', renderAdvanced);
+    var text = document.createElement('div');
+    var strong = document.createElement('div'); strong.textContent = p.label;
+    var code = document.createElement('code'); code.textContent = id;
+    text.appendChild(strong); text.appendChild(code);
+    label.appendChild(radio); label.appendChild(text);
+    profilesEl.appendChild(label);
+  });
+
+  function selectedProfile() {
+    var el = document.querySelector('input[name=profile]:checked');
+    return el ? el.value : current.profile;
+  }
+  function renderAdvanced() {
+    var env = provider.profiles[selectedProfile()].env;
+    $('advanced').textContent = Object.keys(env).map(function (k) { return k + '=' + env[k]; }).join('\n');
+  }
+  renderAdvanced();
+
+  $('toggle').addEventListener('click', function () {
+    var input = $('credential');
+    input.type = input.type === 'password' ? 'text' : 'password';
+    this.textContent = input.type === 'password' ? 'Show' : 'Hide';
+  });
+
+  function show(kind, text) { var m = $('msg'); m.className = 'msg ' + kind; m.textContent = text; }
+  function post(route, body) {
+    return fetch(route, { method: 'POST', headers: { 'content-type': 'application/json', 'x-setup-token': token }, body: JSON.stringify(body) });
+  }
+
+  $('form').addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    $('save').disabled = true;
+    show('', '');
+    post('/save', { credential: $('credential').value, profile: selectedProfile(), baseUrl: $('baseUrl').value })
+      .then(function (res) { return res.json().then(function (body) { return { res: res, body: body }; }); })
+      .then(function (r) {
+        if (r.body.ok) {
+          show('ok', 'Done. You can return to the terminal.');
+          $('cancel').disabled = true;
+        } else {
+          show('err', (r.body.status ? 'HTTP ' + r.body.status + ': ' : '') + r.body.message);
+          $('save').disabled = false;
+        }
+      })
+      .catch(function (err) { show('err', err.message); $('save').disabled = false; });
+  });
+
+  $('cancel').addEventListener('click', function () {
+    post('/cancel', {}).then(function () { show('ok', 'Cancelled. Nothing was saved. You can close this tab.'); $('save').disabled = true; $('cancel').disabled = true; });
+  });
+})();
+</script>
+</body>
+</html>
