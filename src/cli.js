@@ -5,6 +5,7 @@ import { buildEnv, isConfigured } from './env.js';
 import { resolveClaude, launchClaude } from './launch.js';
 import { openBrowser } from './open.js';
 import { startSetupServer } from './setup/server.js';
+import { creditLine, launchBanner } from './credits.js';
 
 const pkg = createRequire(import.meta.url)('../package.json');
 
@@ -18,6 +19,8 @@ Usage:
   wrapper-code --help | --version
 
 Config files live in ~/.config/wrapper-code (POSIX) or %APPDATA%\\wrapper-code (Windows).
+
+${creditLine()}
 `;
 
 const INSTALL_HINT = 'claude not found on PATH. Install Claude Code: npm install -g @anthropic-ai/claude-code\n';
@@ -129,6 +132,8 @@ export async function main(argv, deps = {}) {
     stderr.write(INSTALL_HINT);
     return 1;
   }
+  const profileId = values.WRAPPER_CODE_PROFILE || provider.defaultProfile;
+  stdout.write(`${launchBanner({ version: pkg.version, providerName: provider.name, profileId })}\n`);
   const { code, error } = await launchImpl({ claudePath, args: rest, env: childEnv });
   if (error) stderr.write(`Failed to start claude: ${error.message}\n`);
   return code;

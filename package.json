@@ -8,5 +8,9 @@
   "engines": { "node": ">=18" },
   "scripts": { "test": "node --test" },
   "keywords": ["claude-code", "deepseek", "llm", "cli", "wrapper"],
+  "author": { "name": "Gabriel Fernandes", "email": "gabriel@cd2.com.br", "url": "https://cd2.com.br" },
+  "repository": { "type": "git", "url": "git+https://github.com/nayamonia/wrapper-code.git" },
+  "homepage": "https://github.com/nayamonia/wrapper-code#readme",
+  "bugs": { "url": "https://github.com/nayamonia/wrapper-code/issues" },
   "license": "MIT"
 }

@@ -45,6 +45,16 @@ test('--help exits 0 and --version prints the package version', async () => {
   assert.match(ver.text(), /^\d+\.\d+\.\d+\n$/);
 });
 
+test('--help ends with the author credit', async () => {
+  const out = sink();
+  await main(['--help'], { stdout: out, stderr: sink() });
+  assert.match(out.text(), /MIT/);
+  assert.match(out.text(), /Gabriel Fernandes/);
+  assert.match(out.text(), /gabriel@cd2\.com\.br/);
+  assert.match(out.text(), /github\.com\/nayamonia/);
+  assert.match(out.text(), /cd2\.com\.br/);
+});
+
 test('unknown provider lists the available ones and exits 1', async () => {
   const stderr = sink();
   assert.equal(await main(['nope'], { stdout: sink(), stderr, home: await tmp(), env: {}, platform: 'linux' }), 1);
@@ -84,8 +94,9 @@ test('launch without a credential runs setup, then launches in the same invocati
   const home = await tmp();
   const opts = { platform: 'linux', env: { PATH: '/x' }, home };
   const launched = [];
+  const stdout = sink();
   const code = await main(['deepseek', '--resume'], {
-    stdout: sink(), stderr: sink(), ...opts,
+    stdout, stderr: sink(), ...opts,
     openBrowserImpl: () => true,
     startSetupServerImpl: async ({ writeEnv }) => {
       const values = { ANTHROPIC_AUTH_TOKEN: 'sk-new', WRAPPER_CODE_PROFILE: 'v4-pro' };
@@ -101,6 +112,8 @@ test('launch without a credential runs setup, then launches in the same invocati
   assert.equal(launched[0].env.ANTHROPIC_AUTH_TOKEN, 'sk-new');
   assert.equal(launched[0].env.ANTHROPIC_MODEL, 'deepseek-v4-pro');
   assert.equal(launched[0].env.PATH, '/x');
+  const lines = stdout.text().trimEnd().split('\n');
+  assert.match(lines[lines.length - 1], /^wrapper-code \d+\.\d+\.\d+ · DeepSeek \(v4-pro\) · MIT · by Gabriel Fernandes · cd2\.com\.br$/);
 });
 
 test('launch with claude missing from PATH prints the install hint and exits 1', async () => {

@@ -2,6 +2,7 @@ import http from 'node:http';
 import { randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { derivedEnv } from '../env.js';
+import { CREDITS } from '../credits.js';
 
 const PAGE_URL = new URL('./page.html', import.meta.url);
 const MAX_BODY = 64 * 1024;
@@ -54,6 +55,7 @@ function pagePayload(provider, current, token) {
   }
   return {
     token,
+    credits: CREDITS,
     provider: {
       id: provider.id,
       name: provider.name,

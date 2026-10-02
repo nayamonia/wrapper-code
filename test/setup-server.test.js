@@ -56,6 +56,17 @@ test('GET / with the token serves the page with the provider payload', async () 
   await stop();
 });
 
+test('GET / carries the author credit for the page footer', async () => {
+  const { server, stop } = await boot();
+  const html = await (await fetch(server.url)).text();
+  assert.match(html, /"credits":\{/);
+  assert.match(html, /gabriel@cd2\.com\.br/);
+  assert.match(html, /github\.com\/nayamonia/);
+  assert.match(html, /https:\/\/cd2\.com\.br/);
+  assert.match(html, /id="credits"/);
+  await stop();
+});
+
 test('POST /save without the token header is 403', async () => {
   const { post, written, stop } = await boot();
   const res = await post('/save', { credential: 'sk-x', profile: 'flash-1m' }, 'wrong');

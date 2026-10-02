@@ -32,6 +32,8 @@
   .msg.ok { display: block; background: color-mix(in srgb, var(--ok) 12%, transparent); color: var(--ok); }
   .msg.err { display: block; background: color-mix(in srgb, var(--err) 12%, transparent); color: var(--err); }
   a { color: var(--accent); }
+  .credits { color: var(--muted); font-size: 13px; text-align: center; margin: 20px 0 0; }
+  .credits a { color: inherit; }
 </style>
 </head>
 <body>
@@ -65,6 +67,7 @@
       <div class="msg" id="msg"></div>
     </form>
   </div>
+  <p class="credits" id="credits"></p>
 </main>
 <script>
 (function () {
@@ -74,6 +77,18 @@
 
   $('title').textContent = provider.name + ' setup';
   $('docs').href = provider.docs;
+
+  (function renderCredits() {
+    var c = setup.credits;
+    var el = $('credits');
+    function link(href, text) { var a = document.createElement('a'); a.href = href; a.textContent = text; if (href.indexOf('mailto:') !== 0) { a.target = '_blank'; a.rel = 'noopener'; } return a; }
+    el.appendChild(document.createTextNode('wrapper-code · ' + c.license + ' License · Created by ' + c.name + ' · '));
+    el.appendChild(link('mailto:' + c.email, c.email));
+    el.appendChild(document.createTextNode(' · '));
+    el.appendChild(link(c.github, 'GitHub'));
+    el.appendChild(document.createTextNode(' · '));
+    el.appendChild(link(c.site, c.site.replace(/^https?:\/\//, '')));
+  })();
 
   if (provider.credential) {
     $('credential-label').textContent = provider.credential.label;

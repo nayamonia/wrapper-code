@@ -65,6 +65,14 @@ npm test
 
 Tests never call a real provider API.
 
+## Author
+
+Created by **Gabriel Fernandes** ([CD2](https://cd2.com.br)).
+
+- Email: [gabriel@cd2.com.br](mailto:gabriel@cd2.com.br)
+- GitHub: [@nayamonia](https://github.com/nayamonia)
+- Web: [cd2.com.br](https://cd2.com.br)
+
 ## License
 
-MIT
+[MIT](LICENSE) © 2026 Gabriel Fernandes
