@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import { loadCatalog } from './catalog.js';
-import { readProviderEnv, writeProviderEnv, envFilePath } from './config.js';
+import { readProviderEnv, writeProviderEnv, envFilePath, ConfigError } from './config.js';
 import { buildEnv, isConfigured } from './env.js';
 import { resolveClaude, launchClaude } from './launch.js';
 import { openBrowser } from './open.js';
@@ -39,6 +39,14 @@ async function runSetup(provider, current, { cfg, stdout, stderr, openBrowserImp
   return result;
 }
 
+export function reportFatal(err, stderr = process.stderr) {
+  if (err instanceof ConfigError) {
+    stderr.write(`wrapper-code: ${err.message}\n`);
+  } else {
+    stderr.write(`wrapper-code: unexpected error\n${err?.stack ?? String(err)}\n`);
+  }
+}
+
 export async function main(argv, deps = {}) {
   const {
     stdout = process.stdout,
@@ -73,12 +81,19 @@ export async function main(argv, deps = {}) {
   };
 
   if (first === 'list') {
+    let failed = false;
     for (const provider of catalog.values()) {
-      const values = await readProviderEnv(provider.id, cfg);
-      const status = isConfigured(provider, values) ? 'configured' : 'not configured';
+      let status;
+      try {
+        const values = await readProviderEnv(provider.id, cfg);
+        status = isConfigured(provider, values) ? 'configured' : 'not configured';
+      } catch (err) {
+        failed = true;
+        status = `error: ${err.message}`;
+      }
       stdout.write(`${provider.id.padEnd(12)} ${provider.name.padEnd(12)} ${status}\n`);
     }
-    return 0;
+    return failed ? 1 : 0;
   }
 
   if (first === 'setup') {

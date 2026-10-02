@@ -5,8 +5,8 @@ import { mkdtemp, writeFile, mkdir, chmod, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { main, HELP } from '../src/cli.js';
-import { writeProviderEnv } from '../src/config.js';
+import { main, HELP, reportFatal } from '../src/cli.js';
+import { writeProviderEnv, ConfigError } from '../src/config.js';
 
 const BIN = fileURLToPath(new URL('../bin/wrapper-code.js', import.meta.url));
 const isWin = process.platform === 'win32';
@@ -177,4 +177,46 @@ test('end-to-end: a malformed env file prints the path and the setup hint and ex
   assert.equal(result.code, 1);
   assert.match(result.stderr, /deepseek\.env/);
   assert.match(result.stderr, /wrapper-code setup deepseek/);
+});
+
+async function malformedHome() {
+  const home = await tmp();
+  const cfg = path.join(home, '.config', 'wrapper-code');
+  await mkdir(cfg, { recursive: true });
+  await writeFile(path.join(cfg, 'deepseek.env'), 'broken\n');
+  return home;
+}
+
+test('list reports a malformed env file as an error row and exits 1', async () => {
+  const home = await malformedHome();
+  const stdout = sink();
+  const code = await main(['list'], { stdout, stderr: sink(), home, env: {}, platform: 'linux' });
+  assert.equal(code, 1);
+  assert.match(stdout.text(), /deepseek\s+DeepSeek\s+error:/);
+  assert.match(stdout.text(), /wrapper-code setup deepseek/);
+});
+
+test('setup with a malformed env file rejects with ConfigError before starting the server', async () => {
+  const home = await malformedHome();
+  let started = false;
+  await assert.rejects(
+    main(['setup', 'deepseek'], {
+      stdout: sink(), stderr: sink(), home, env: {}, platform: 'linux',
+      startSetupServerImpl: async () => { started = true; throw new Error('should not start'); },
+    }),
+    (err) => err instanceof ConfigError && /deepseek\.env/.test(err.message),
+  );
+  assert.equal(started, false);
+});
+
+test('reportFatal prints ConfigError plainly and other errors with a stack', () => {
+  const a = sink();
+  reportFatal(new ConfigError('bad file'), a);
+  assert.equal(a.text(), 'wrapper-code: bad file\n');
+  const b = sink();
+  reportFatal(new TypeError('boom'), b);
+  assert.match(b.text(), /^wrapper-code: unexpected error\nTypeError: boom\n\s+at /);
+  const c = sink();
+  reportFatal('just a string', c);
+  assert.equal(c.text(), 'wrapper-code: unexpected error\njust a string\n');
 });
