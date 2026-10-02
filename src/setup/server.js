@@ -79,6 +79,7 @@ export async function startSetupServer({
   let resolveDone;
   const done = new Promise((resolve) => { resolveDone = resolve; });
   let finished = false;
+  let saving = false;
   let timer;
 
   const finish = (result) => {
@@ -110,7 +111,7 @@ export async function startSetupServer({
     if (req.method === 'GET' && url.pathname === '/') {
       const json = JSON.stringify(pagePayload(provider, current, token)).replace(/<\//g, '<\\/');
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
-      res.end(template.replace('__SETUP_JSON__', json));
+      res.end(template.replace('__SETUP_JSON__', () => json));
       return;
     }
 
@@ -121,40 +122,62 @@ export async function startSetupServer({
     }
 
     if (req.method === 'POST' && url.pathname === '/save') {
-      let body;
+      if (finished) {
+        sendJson(res, 409, { ok: false, status: 0, message: 'Setup already finished' });
+        return;
+      }
+      if (saving) {
+        sendJson(res, 409, { ok: false, status: 0, message: 'A save is already in progress' });
+        return;
+      }
+      saving = true;
       try {
-        body = JSON.parse((await readBody(req)) || '{}');
-      } catch {
-        sendJson(res, 400, { ok: false, status: 0, message: 'Invalid JSON body' });
-        return;
-      }
-      const profile = String(body.profile || '');
-      if (!provider.profiles[profile]) {
-        sendJson(res, 400, { ok: false, status: 0, message: `Unknown profile "${profile}"` });
-        return;
-      }
-      const values = { ...current, WRAPPER_CODE_PROFILE: profile };
-      let credential = '';
-      if (provider.credential) {
-        credential = String(body.credential || '').trim() || current[provider.credential.env] || '';
-        if (!credential) {
-          sendJson(res, 400, { ok: false, status: 0, message: `${provider.credential.label} is required` });
+        let body;
+        try {
+          body = JSON.parse((await readBody(req)) || '{}');
+        } catch {
+          sendJson(res, 400, { ok: false, status: 0, message: 'Invalid JSON body' });
           return;
         }
-        values[provider.credential.env] = credential;
-      }
-      if (provider.editableBaseUrl && String(body.baseUrl || '').trim()) {
-        values.ANTHROPIC_BASE_URL = String(body.baseUrl).trim();
-      }
-      const result = await testCredential(provider, credential, { fetchImpl, testUrl });
-      if (!result.ok) {
-        sendJson(res, 400, result);
+        const profile = String(body.profile || '');
+        if (!provider.profiles[profile]) {
+          sendJson(res, 400, { ok: false, status: 0, message: `Unknown profile "${profile}"` });
+          return;
+        }
+        const values = { ...current, WRAPPER_CODE_PROFILE: profile };
+        let credential = '';
+        if (provider.credential) {
+          credential = String(body.credential || '').trim() || current[provider.credential.env] || '';
+          if (!credential) {
+            sendJson(res, 400, { ok: false, status: 0, message: `${provider.credential.label} is required` });
+            return;
+          }
+          values[provider.credential.env] = credential;
+        }
+        if (provider.editableBaseUrl && String(body.baseUrl || '').trim()) {
+          values.ANTHROPIC_BASE_URL = String(body.baseUrl).trim();
+        }
+        const result = await testCredential(provider, credential, { fetchImpl, testUrl });
+        if (finished) {
+          sendJson(res, 409, { ok: false, status: 0, message: 'Setup already finished' });
+          return;
+        }
+        if (!result.ok) {
+          sendJson(res, 400, result);
+          return;
+        }
+        try {
+          await writeEnv(values);
+        } catch (err) {
+          sendJson(res, 500, { ok: false, status: 0, message: err.message });
+          return;
+        }
+        sendJson(res, 200, { ok: true });
+        finish({ saved: true, values });
         return;
+      } finally {
+        saving = false;
       }
-      await writeEnv(values);
-      sendJson(res, 200, { ok: true });
-      finish({ saved: true, values });
-      return;
     }
 
     res.writeHead(404);

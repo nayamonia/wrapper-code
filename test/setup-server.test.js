@@ -13,15 +13,16 @@ async function fakeApi(status) {
   return { url: `http://127.0.0.1:${server.address().port}/models`, close: () => { server.closeAllConnections(); server.close(); } };
 }
 
-async function boot({ status = 200, current = {}, timeoutMs } = {}) {
+async function boot({ status = 200, current = {}, timeoutMs, fetchImpl, writeEnv, provider = deepseek } = {}) {
   const api = await fakeApi(status);
   const written = [];
   const server = await startSetupServer({
-    provider: deepseek,
+    provider,
     current,
+    fetchImpl,
     testUrl: api.url,
     timeoutMs,
-    writeEnv: async (values) => { written.push(values); },
+    writeEnv: writeEnv || (async (values) => { written.push(values); }),
   });
   const post = (route, body, token = server.token) => fetch(`http://127.0.0.1:${server.port}${route}`, {
     method: 'POST',
@@ -161,4 +162,59 @@ test('testCredential reports a network error as status 0', async () => {
   assert.equal(result.ok, false);
   assert.equal(result.status, 0);
   assert.match(result.message, /ECONNREFUSED/);
+});
+
+test('POST /save with a failing writeEnv is 500 and the server stays usable', async () => {
+  const { server, post, api } = await boot({ writeEnv: async () => { throw new Error('EACCES: denied'); } });
+  const res = await post('/save', { credential: 'sk-x', profile: 'flash-1m' });
+  assert.equal(res.status, 500);
+  const body = await res.json();
+  assert.equal(body.ok, false);
+  assert.match(body.message, /EACCES/);
+  const cancel = await post('/cancel', {});
+  assert.equal(cancel.status, 200);
+  assert.deepEqual(await server.done, { saved: false, reason: 'cancelled' });
+  api.close();
+});
+
+test('two concurrent saves write once and the second gets 409', async () => {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const fetchImpl = async () => { await gate; return { ok: true, status: 200, statusText: 'OK', text: async () => '' }; };
+  const { server, post, written, api } = await boot({ fetchImpl });
+  const first = post('/save', { credential: 'sk-1', profile: 'flash-1m' });
+  await new Promise((r) => setTimeout(r, 50));
+  const second = await post('/save', { credential: 'sk-2', profile: 'flash-1m' });
+  assert.equal(second.status, 409);
+  release();
+  assert.equal((await first).status, 200);
+  assert.equal(written.length, 1);
+  await server.done;
+  api.close();
+});
+
+test('close() during an in-flight credential test prevents the write', async () => {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const fetchImpl = async () => { await gate; return { ok: true, status: 200, statusText: 'OK', text: async () => '' }; };
+  const { server, post, written, api } = await boot({ fetchImpl });
+  const pending = post('/save', { credential: 'sk-1', profile: 'flash-1m' });
+  await new Promise((r) => setTimeout(r, 50));
+  server.close();
+  assert.deepEqual(await server.done, { saved: false, reason: 'closed' });
+  release();
+  const res = await pending.catch(() => null);
+  if (res) assert.equal(res.status, 409);
+  await new Promise((r) => setTimeout(r, 50));
+  assert.equal(written.length, 0);
+  api.close();
+});
+
+test('page payload containing $-replacement patterns is spliced literally', async () => {
+  const provider = { ...deepseek, editableBaseUrl: true };
+  const { server, stop } = await boot({ provider, current: { ANTHROPIC_BASE_URL: "https://x/$'" } });
+  const html = await (await fetch(server.url)).text();
+  assert.ok(html.includes("https://x/$'"));
+  assert.equal(html.split('</html>').length - 1, 1);
+  await stop();
 });
