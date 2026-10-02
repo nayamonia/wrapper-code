@@ -63,7 +63,7 @@ test('quoteForCmd leaves simple args alone and double-quotes the rest', () => {
 
 test('launchClaude passes env and args to the child and propagates its exit code', async () => {
   const dir = await tmp();
-  const script = path.join(dir, 'fake-claude.js');
+  const script = path.join(dir, 'fake-claude.mjs');
   const out = path.join(dir, 'out.json');
   await writeFile(script, `
     import { writeFileSync } from 'node:fs';
@@ -98,4 +98,76 @@ test('launchClaude uses a shell with quoted args only for .cmd/.bat paths', asyn
   assert.equal(calls[0].cmd, '"C:\\x\\claude.cmd"');
   assert.equal(calls[1].opts.stdio, 'inherit');
   assert.deepEqual(calls[1].args, ['a b']);
+});
+
+test('resolveClaude on win32 with both claude and claude.cmd returns claude.cmd', async () => {
+  const dir = await tmp();
+  await writeFile(path.join(dir, 'claude'), '#!/bin/sh\n');
+  await writeFile(path.join(dir, 'claude.cmd'), '@echo off\r\n');
+  const found = resolveClaude({
+    platform: 'win32',
+    env: { PATH: dir, PATHEXT: '.COM;.EXE;.BAT;.CMD' },
+  });
+  assert.equal(found, path.join(dir, 'claude.cmd'));
+});
+
+test('launchClaude installs SIGINT listener and removes it on exit', async () => {
+  const initialCount = process.listenerCount('SIGINT');
+  let exitCb;
+  const fakeSpawn = (cmd, args, opts) => {
+    return {
+      on: (event, cb) => {
+        if (event === 'exit') {
+          exitCb = cb;
+        }
+      },
+    };
+  };
+  const promise = launchClaude({ claudePath: '/usr/bin/claude', args: [], env: {}, spawnImpl: fakeSpawn });
+  await new Promise((r) => setImmediate(r));
+  // Listener should have been added while child runs
+  assert.equal(process.listenerCount('SIGINT'), initialCount + 1);
+  // Complete the child
+  exitCb(0, null);
+  await promise;
+  // Listener should be removed after exit
+  assert.equal(process.listenerCount('SIGINT'), initialCount);
+});
+
+test('launchClaude forwards SIGTERM to child', async () => {
+  const kills = [];
+  let exitCb;
+  const fakeSpawn = (cmd, args, opts) => {
+    return {
+      on: (event, cb) => {
+        if (event === 'exit') {
+          exitCb = cb;
+        }
+      },
+      kill: (sig) => {
+        kills.push(sig);
+      },
+    };
+  };
+  const promise = launchClaude({ claudePath: '/usr/bin/claude', args: [], env: {}, spawnImpl: fakeSpawn });
+  await new Promise((r) => setImmediate(r));
+  process.emit('SIGTERM');
+  await new Promise((r) => setImmediate(r));
+  assert.deepEqual(kills, ['SIGTERM']);
+  // Complete the child
+  exitCb(0, null);
+  await promise;
+});
+
+test('launchClaude exit with SIGTERM signal resolves with signal', async () => {
+  const fakeSpawn = (cmd, args, opts) => ({
+    on: (event, cb) => {
+      if (event === 'exit') {
+        setImmediate(() => cb(null, 'SIGTERM'));
+      }
+    },
+  });
+  const result = await launchClaude({ claudePath: '/usr/bin/claude', args: [], env: {}, spawnImpl: fakeSpawn });
+  assert.equal(result.code, 1);
+  assert.equal(result.signal, 'SIGTERM');
 });

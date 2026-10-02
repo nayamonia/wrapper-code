@@ -5,7 +5,7 @@ import path from 'node:path';
 export function resolveClaude({ platform = process.platform, env = process.env } = {}) {
   const dirs = (env.PATH || '').split(path.delimiter).filter(Boolean);
   const exts = platform === 'win32'
-    ? ['', ...(env.PATHEXT || '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean).map((e) => e.toLowerCase())]
+    ? (env.PATHEXT || '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean).map((e) => e.toLowerCase())
     : [''];
   for (const dir of dirs) {
     for (const ext of exts) {
@@ -39,7 +39,25 @@ export function launchClaude({ claudePath, args, env, spawnImpl = spawn }) {
       resolve({ code: 1, error });
       return;
     }
-    child.on('error', (error) => resolve({ code: 1, error }));
-    child.on('exit', (code, signal) => resolve({ code: code ?? 1, signal: signal ?? undefined }));
+    const onSigint = () => {
+      // no-op: let the child handle SIGINT
+    };
+    const onSigterm = () => {
+      child.kill('SIGTERM');
+    };
+    process.on('SIGINT', onSigint);
+    process.on('SIGTERM', onSigterm);
+    const cleanup = () => {
+      process.removeListener('SIGINT', onSigint);
+      process.removeListener('SIGTERM', onSigterm);
+    };
+    child.on('error', (error) => {
+      cleanup();
+      resolve({ code: 1, error });
+    });
+    child.on('exit', (code, signal) => {
+      cleanup();
+      resolve({ code: code ?? 1, signal: signal ?? undefined });
+    });
   });
 }
