@@ -19,6 +19,10 @@ test('renderSite builds a self-contained landing page from the brand, the catalo
   assert.match(html, /npm install -g wrapper-code/);
   assert.match(html, /<div class="install" id="install">[^\n]*<span class="p">\$<\/span> wrapper-code deepseek<\/div>/, 'hero example uses deepseek');
   assert.doesNotMatch(html, /<h3>8-bit<\/h3>/, 'no 8-bit card');
+  const row = (id) => html.slice(html.indexOf(`<code>wrapper-code ${id}</code>`), html.indexOf('</tr>', html.indexOf(`<code>wrapper-code ${id}</code>`)));
+  assert.match(row('ollama'), /Models discovered from your server at setup time/);
+  assert.doesNotMatch(row('openrouter'), /your server/, 'a hosted catalog is not "your server"');
+  assert.match(row('openrouter'), /Any model with tool calling, picked from the live catalog at setup time/);
   assert.deepEqual([...html.matchAll(/<div class="box"><h3>([^<]+)<\/h3>/g)].map((m) => m[1]), ['Isolated', 'Side by side', 'Setup in the browser'], 'card order');
   assert.match(html, /<h3>Side by side<\/h3><p>[^<]*several Claude Code sessions at the same time/, 'card about parallel sessions with different LLMs');
   assert.match(html, /v0\.1\.0/);
@@ -57,4 +61,13 @@ test('renderSite escapes provider text', async () => {
   assert.match(html, /A&lt;b&gt;&amp;&quot;c&quot;/);
   assert.match(html, /&lt;i&gt;label&lt;\/i&gt;/);
   assert.doesNotMatch(html, /<i>label<\/i>/);
+});
+
+test('the committed docs/index.html is up to date with the catalog (run: npm run site)', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const { createRequire } = await import('node:module');
+  const pkg = createRequire(import.meta.url)('../package.json');
+  const committed = await readFile(new URL('../docs/index.html', import.meta.url), 'utf8');
+  const catalog = await loadCatalog();
+  assert.ok(committed === renderSite({ catalog, version: pkg.version }), 'docs/index.html is stale: run `npm run site` and commit the result');
 });
