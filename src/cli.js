@@ -5,7 +5,8 @@ import { buildEnv, isConfigured } from './env.js';
 import { resolveClaude, launchClaude } from './launch.js';
 import { openBrowser } from './open.js';
 import { startSetupServer } from './setup/server.js';
-import { creditLine, launchBanner } from './credits.js';
+import { creditLine } from './credits.js';
+import { showSplash } from './splash.js';
 
 const pkg = createRequire(import.meta.url)('../package.json');
 
@@ -62,6 +63,7 @@ export async function main(argv, deps = {}) {
     resolveClaudeImpl = resolveClaude,
     startSetupServerImpl = startSetupServer,
     catalogImpl = loadCatalog,
+    sleepImpl,
   } = deps;
   const cfg = { platform, env, ...(home ? { home } : {}) };
   const setupDeps = { cfg, stdout, stderr, openBrowserImpl, startSetupServerImpl };
@@ -133,7 +135,7 @@ export async function main(argv, deps = {}) {
     return 1;
   }
   const selection = provider.models ? values.WRAPPER_CODE_MODEL : (values.WRAPPER_CODE_PROFILE || provider.defaultProfile);
-  stdout.write(`${launchBanner({ version: pkg.version, providerName: provider.name, profileId: selection })}\n`);
+  await showSplash({ stdout, env, version: pkg.version, providerName: provider.name, selection, ...(sleepImpl ? { sleep: sleepImpl } : {}) });
   const { code, error } = await launchImpl({ claudePath, args: rest, env: childEnv });
   if (error) stderr.write(`Failed to start claude: ${error.message}\n`);
   return code;

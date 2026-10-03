@@ -513,3 +513,20 @@ test('client disconnect during the credential test still resolves done as saved 
   assert.deepEqual(result.values, written[0]);
   api.close();
 });
+
+test('GET / carries the brand: favicon data URI, sprite and wordmark SVGs, no leftover placeholders', async () => {
+  const { server, stop } = await boot();
+  const html = await (await fetch(server.url)).text();
+  assert.match(html, /<link rel="icon" href="data:image\/svg\+xml;utf8,/);
+  assert.match(html, /class="brand-sprite"[^>]*>\s*<svg [^>]*viewBox="0 0 16 16"/);
+  assert.match(html, /class="brand-wordmark"[^>]*>\s*<svg [^>]*viewBox="0 0 50 5"/);
+  assert.doesNotMatch(html, /__BRAND_SPRITE__|__BRAND_WORDMARK__|__FAVICON__|__SETUP_JSON__/);
+  assert.ok((html.match(/<rect /g) || []).length > 100);
+  await stop();
+});
+
+test('brand injection uses a function replacer so $ sequences survive', async () => {
+  const { injectBrand } = await import('../src/setup/server.js');
+  const out = injectBrand('A __BRAND_SPRITE__ B', { sprite: 'x$&y', wordmark: '', favicon: '' });
+  assert.equal(out, 'A x$&y B');
+});
