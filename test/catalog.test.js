@@ -199,3 +199,11 @@ test('help texts no longer mention the Coding Plan or the old ids', async () => 
   assert.doesNotMatch(qwencloud, /Coding Plan|alibaba-token/);
   assert.deepEqual([...catalog.keys()].sort(), ['alibaba', 'deepseek', 'ollama', 'qwencloud']);
 });
+
+test('validateProvider accepts models.format ollama/openrouter and models.emptyHint, rejects other formats', () => {
+  const base = validModels();
+  assert.doesNotThrow(() => validateProvider({ ...base, models: { ...base.models, format: 'ollama' } }));
+  assert.doesNotThrow(() => validateProvider({ ...base, models: { ...base.models, format: 'openrouter', emptyHint: 'none' } }));
+  assert.throws(() => validateProvider({ ...base, models: { ...base.models, format: 'openai' } }), /models\.format/);
+  assert.throws(() => validateProvider({ ...base, models: { ...base.models, emptyHint: 7 } }), /models\.emptyHint/);
+});

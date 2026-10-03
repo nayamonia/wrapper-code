@@ -37,6 +37,12 @@ export function validateProvider(provider) {
     if (!Array.isArray(m.envKeys) || m.envKeys.length === 0 || !m.envKeys.every((k) => typeof k === 'string')) {
       throw new Error(`${where}: models.envKeys must be a non-empty array of strings`);
     }
+    if (m.format !== undefined && !['ollama', 'openrouter'].includes(m.format)) {
+      throw new Error(`${where}: models.format must be "ollama" or "openrouter"`);
+    }
+    if (m.emptyHint !== undefined && typeof m.emptyHint !== 'string') {
+      throw new Error(`${where}: models.emptyHint must be a string`);
+    }
   }
   if (provider.credential !== null) {
     if (!isObject(provider.credential) || typeof provider.credential.env !== 'string' || typeof provider.credential.label !== 'string') {
