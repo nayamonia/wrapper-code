@@ -67,6 +67,7 @@ async function pagePayload(provider, current, token, { fetchImpl, discoveryTimeo
       docs: provider.docs,
       credential: provider.credential,
       editableBaseUrl: Boolean(provider.editableBaseUrl),
+      env: provider.env,
     },
     current: {
       hasCredential: Boolean(provider.credential && current[provider.credential.env]),

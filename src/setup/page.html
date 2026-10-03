@@ -34,6 +34,9 @@
   a { color: var(--accent); }
   .credits { color: var(--muted); font-size: 13px; text-align: center; margin: 20px 0 0; }
   .credits a { color: inherit; }
+  .profile.off { opacity: .55; cursor: not-allowed; }
+  .status { color: var(--muted); font-size: 13px; }
+  .status.err { color: var(--err); }
 </style>
 </head>
 <body>
@@ -54,8 +57,21 @@
         <label for="baseUrl">Base URL</label>
         <input id="baseUrl" type="text" autocomplete="off" spellcheck="false">
       </div>
-      <label>Model profile</label>
-      <div id="profiles"></div>
+      <div id="profiles-block">
+        <label>Model profile</label>
+        <div id="profiles"></div>
+      </div>
+      <div id="models-block" hidden>
+        <label>Model</label>
+        <div class="row" style="margin-bottom:8px">
+          <span class="status" id="models-status"></span>
+          <button type="button" id="refresh">Refresh list</button>
+        </div>
+        <div id="models"></div>
+        <label for="otherModel">Other model</label>
+        <input id="otherModel" type="text" autocomplete="off" spellcheck="false" placeholder="e.g. gemma4:cloud">
+        <p class="help" id="models-note"></p>
+      </div>
       <details>
         <summary>Advanced: variables that will be injected</summary>
         <pre id="advanced"></pre>
@@ -102,31 +118,126 @@
     $('baseUrl').value = current.baseUrl || '';
   }
 
-  var profilesEl = $('profiles');
-  Object.keys(provider.profiles).forEach(function (id) {
-    var p = provider.profiles[id];
-    var label = document.createElement('label');
-    label.className = 'profile';
-    var radio = document.createElement('input');
-    radio.type = 'radio'; radio.name = 'profile'; radio.value = id; radio.checked = id === current.profile;
-    radio.addEventListener('change', renderAdvanced);
-    var text = document.createElement('div');
-    var strong = document.createElement('div'); strong.textContent = p.label;
-    var code = document.createElement('code'); code.textContent = id;
-    text.appendChild(strong); text.appendChild(code);
-    label.appendChild(radio); label.appendChild(text);
-    profilesEl.appendChild(label);
-  });
+  var isModels = Boolean(provider.models);
+  $('profiles-block').hidden = isModels;
+  $('models-block').hidden = !isModels;
+
+  if (!isModels) {
+    var profilesEl = $('profiles');
+    Object.keys(provider.profiles).forEach(function (id) {
+      var p = provider.profiles[id];
+      var label = document.createElement('label');
+      label.className = 'profile';
+      var radio = document.createElement('input');
+      radio.type = 'radio'; radio.name = 'profile'; radio.value = id; radio.checked = id === current.profile;
+      radio.addEventListener('change', renderAdvanced);
+      var text = document.createElement('div');
+      var strong = document.createElement('div'); strong.textContent = p.label;
+      var code = document.createElement('code'); code.textContent = id;
+      text.appendChild(strong); text.appendChild(code);
+      label.appendChild(radio); label.appendChild(text);
+      profilesEl.appendChild(label);
+    });
+  }
 
   function selectedProfile() {
     var el = document.querySelector('input[name=profile]:checked');
     return el ? el.value : current.profile;
   }
+
+  function renderModels(discovery) {
+    var list = $('models');
+    var status = $('models-status');
+    list.textContent = '';
+    status.className = 'status';
+    if (!discovery.ok) {
+      status.className = 'status err';
+      status.textContent = discovery.message;
+      renderAdvanced();
+      return;
+    }
+    var found = discovery.models.length;
+    status.textContent = found ? found + ' model' + (found === 1 ? '' : 's') + ' installed' : 'No models installed. Run: ollama pull qwen3-coder';
+    discovery.models.forEach(function (m) {
+      var label = document.createElement('label');
+      label.className = 'profile' + (m.tools === false ? ' off' : '');
+      var radio = document.createElement('input');
+      radio.type = 'radio'; radio.name = 'model'; radio.value = m.name;
+      radio.disabled = m.tools === false;
+      if (m.contextLength) radio.setAttribute('data-context', String(m.contextLength));
+      radio.checked = m.name === current.model && !radio.disabled;
+      radio.addEventListener('change', function () { $('otherModel').value = ''; renderAdvanced(); });
+      var text = document.createElement('div');
+      var strong = document.createElement('div'); strong.textContent = m.name;
+      var meta = [];
+      if (m.parameterSize) meta.push(m.parameterSize);
+      if (m.contextLength) meta.push(Math.round(m.contextLength / 1024) + 'k context');
+      if (m.tools === false) meta.push('no tool support, cannot run Claude Code');
+      if (m.tools === null) meta.push('tool support unknown');
+      var code = document.createElement('code'); code.textContent = meta.join(' · ');
+      text.appendChild(strong); text.appendChild(code);
+      label.appendChild(radio); label.appendChild(text);
+      list.appendChild(label);
+    });
+    if (current.model && !document.querySelector('input[name=model]:checked')) $('otherModel').value = current.model;
+    renderAdvanced();
+  }
+
+  function selectedModel() {
+    var typed = $('otherModel').value.trim();
+    if (typed) return { name: typed, contextLength: null };
+    var el = document.querySelector('input[name=model]:checked');
+    if (!el) return { name: '', contextLength: null };
+    var ctx = parseInt(el.getAttribute('data-context') || '', 10);
+    return { name: el.value, contextLength: isNaN(ctx) ? null : ctx };
+  }
+
   function renderAdvanced() {
-    var env = provider.profiles[selectedProfile()].env;
+    var env;
+    if (isModels) {
+      var model = selectedModel().name || '<model>';
+      env = {};
+      Object.keys(provider.env || {}).forEach(function (k) { env[k] = provider.env[k]; });
+      var typedUrl = $('baseUrl').value.trim().replace(/\/+$/, '');
+      if (typedUrl) env.ANTHROPIC_BASE_URL = typedUrl;
+      provider.models.envKeys.forEach(function (k) { env[k] = model; });
+    } else {
+      env = provider.profiles[selectedProfile()].env;
+    }
     $('advanced').textContent = Object.keys(env).map(function (k) { return k + '=' + env[k]; }).join('\n');
   }
-  renderAdvanced();
+
+  if (isModels) {
+    $('models-note').textContent = provider.models.note || '';
+    $('otherModel').addEventListener('input', function () {
+      if (this.value.trim()) {
+        var checked = document.querySelector('input[name=model]:checked');
+        if (checked) checked.checked = false;
+      }
+      renderAdvanced();
+    });
+    $('baseUrl').addEventListener('input', renderAdvanced);
+    $('refresh').addEventListener('click', function () {
+      $('models-status').className = 'status';
+      $('models-status').textContent = 'Refreshing…';
+      fetch('/models?baseUrl=' + encodeURIComponent($('baseUrl').value), { headers: { 'x-setup-token': token } })
+        .then(function (res) {
+          return res.text().then(function (text) {
+            var body;
+            try { body = JSON.parse(text); } catch (e) { body = null; }
+            if (!body || typeof body !== 'object' || typeof body.ok !== 'boolean') {
+              body = { ok: false, message: 'HTTP ' + res.status + (res.statusText ? ' ' + res.statusText : '') };
+            }
+            return body;
+          });
+        })
+        .then(renderModels)
+        .catch(function (err) { renderModels({ ok: false, message: err.message }); });
+    });
+    renderModels(setup.discovery);
+  } else {
+    renderAdvanced();
+  }
 
   $('toggle').addEventListener('click', function () {
     var input = $('credential');
@@ -143,7 +254,14 @@
     ev.preventDefault();
     $('save').disabled = true;
     show('', '');
-    post('/save', { credential: $('credential').value, profile: selectedProfile(), baseUrl: $('baseUrl').value })
+    var sel = isModels ? selectedModel() : null;
+    post('/save', {
+      credential: $('credential').value,
+      profile: isModels ? undefined : selectedProfile(),
+      baseUrl: $('baseUrl').value,
+      model: sel ? sel.name : undefined,
+      contextLength: sel ? sel.contextLength : undefined,
+    })
       .then(function (res) {
         return res.text().then(function (text) {
           var body;
