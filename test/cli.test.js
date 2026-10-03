@@ -339,25 +339,26 @@ test('launch on a color TTY shows the 8-bit splash instead of the one-line banne
   assert.doesNotMatch(plain, /wrapper-code \d+\.\d+\.\d+ · DeepSeek \(v4-pro\)/, 'plain banner not printed');
 });
 
-test('list shows qwen as not configured before setup', async () => {
+test('list shows qwencloud as not configured before setup', async () => {
   const out = sink();
   await main(['list'], { stdout: out, stderr: sink(), platform: 'linux', env: {}, home: await tmp() });
-  assert.match(out.text(), /qwen\s+Qwen \(Alibaba Model Studio\)\s+not configured/);
+  assert.match(out.text(), /qwencloud\s+Qwen Cloud\s+not configured/);
+  assert.doesNotMatch(out.text(), /^qwen\s/m);
 });
 
-test('qwen: launch before setup opens the setup page for the qwen provider', async () => {
+test('qwencloud: launch before setup opens the setup page for the qwencloud provider', async () => {
   const setups = [];
-  const code = await main(['qwen'], {
+  const code = await main(['qwencloud'], {
     stdout: sink(), stderr: sink(), platform: 'linux', env: {}, home: await tmp(),
     openBrowserImpl: () => true,
     startSetupServerImpl: async (o) => { setups.push(o); return { url: 'u', done: Promise.resolve({ saved: false, reason: 'cancelled' }), close() {} }; },
     launchImpl: async () => { throw new Error('must not launch'); },
   });
   assert.equal(code, 1);
-  assert.equal(setups[0].provider.id, 'qwen');
+  assert.equal(setups[0].provider.id, 'qwencloud');
 });
 
-test('end-to-end: qwen launches a fake claude with the Coding Plan env', { skip: isWin }, async () => {
+test('end-to-end: qwencloud launches a fake claude with the pay-as-you-go env', { skip: isWin }, async () => {
   const home = await tmp();
   const binDir = path.join(home, 'fakebin');
   await mkdir(binDir);
@@ -368,7 +369,7 @@ require('fs').writeFileSync(process.env.FAKE_OUT, JSON.stringify({ argv: process
 process.exit(0);
 `);
   await chmod(fake, 0o755);
-  await writeProviderEnv('qwen', { ANTHROPIC_AUTH_TOKEN: 'cp-e2e', WRAPPER_CODE_PROFILE: 'coding-plan' }, { platform: 'linux', env: {}, home });
+  await writeProviderEnv('qwencloud', { ANTHROPIC_AUTH_TOKEN: 'sk-qc-e2e', WRAPPER_CODE_PROFILE: 'pay-as-you-go' }, { platform: 'linux', env: {}, home });
   const env = {
     ...process.env,
     HOME: home,
@@ -377,20 +378,23 @@ process.exit(0);
     FAKE_OUT: out,
     ANTHROPIC_API_KEY: 'must-be-removed',
   };
-  const result = await run(['qwen', '--resume'], env);
+  const result = await run(['qwencloud', '--resume'], env);
   assert.equal(result.code, 0, result.stderr);
   const seen = JSON.parse(await readFile(out, 'utf8'));
   assert.deepEqual(seen.argv, ['--resume']);
-  assert.equal(seen.env.ANTHROPIC_BASE_URL, 'https://coding-intl.dashscope.aliyuncs.com/apps/anthropic');
-  assert.equal(seen.env.ANTHROPIC_AUTH_TOKEN, 'cp-e2e');
-  for (const key of ['ANTHROPIC_MODEL', 'ANTHROPIC_DEFAULT_HAIKU_MODEL', 'ANTHROPIC_DEFAULT_SONNET_MODEL', 'ANTHROPIC_DEFAULT_OPUS_MODEL', 'CLAUDE_CODE_SUBAGENT_MODEL']) {
-    assert.equal(seen.env[key], 'qwen3.7-plus', key);
-  }
+  assert.equal(seen.env.ANTHROPIC_BASE_URL, 'https://maas.qwencloudapi.com/apps/anthropic');
+  assert.equal(seen.env.ANTHROPIC_AUTH_TOKEN, 'sk-qc-e2e');
+  assert.equal(seen.env.ANTHROPIC_MODEL, 'auto');
+  assert.equal(seen.env.ANTHROPIC_DEFAULT_HAIKU_MODEL, 'qwen3.6-flash');
+  assert.equal(seen.env.ANTHROPIC_DEFAULT_SONNET_MODEL, 'qwen3.8-flash');
+  assert.equal(seen.env.ANTHROPIC_DEFAULT_OPUS_MODEL, 'qwen3.8-max');
+  assert.equal(seen.env.CLAUDE_CODE_SUBAGENT_MODEL, 'auto');
+  assert.equal(seen.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS, '983616');
   assert.equal('ANTHROPIC_API_KEY' in seen.env, false);
   assert.equal('WRAPPER_CODE_PROFILE' in seen.env, false);
 });
 
-test('end-to-end: alibaba-token launches a fake claude with the Token Plan env', { skip: isWin }, async () => {
+test('end-to-end: alibaba launches a fake claude with the Token Plan env', { skip: isWin }, async () => {
   const home = await tmp();
   const binDir = path.join(home, 'fakebin');
   await mkdir(binDir);
@@ -401,7 +405,7 @@ require('fs').writeFileSync(process.env.FAKE_OUT, JSON.stringify({ argv: process
 process.exit(0);
 `);
   await chmod(fake, 0o755);
-  await writeProviderEnv('alibaba-token', { ANTHROPIC_AUTH_TOKEN: 'tp-e2e', WRAPPER_CODE_PROFILE: 'deepseek-pro' }, { platform: 'linux', env: {}, home });
+  await writeProviderEnv('alibaba', { ANTHROPIC_AUTH_TOKEN: 'tp-e2e', WRAPPER_CODE_PROFILE: 'deepseek-pro' }, { platform: 'linux', env: {}, home });
   const env = {
     ...process.env,
     HOME: home,
@@ -409,11 +413,37 @@ process.exit(0);
     PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
     FAKE_OUT: out,
   };
-  const result = await run(['alibaba-token'], env);
+  const result = await run(['alibaba'], env);
   assert.equal(result.code, 0, result.stderr);
   const seen = JSON.parse(await readFile(out, 'utf8'));
   assert.equal(seen.env.ANTHROPIC_BASE_URL, 'https://token-plan.ap-southeast-1.maas.aliyuncs.com/apps/anthropic');
   assert.equal(seen.env.ANTHROPIC_AUTH_TOKEN, 'tp-e2e');
   assert.equal(seen.env.ANTHROPIC_MODEL, 'deepseek-v4-pro');
   assert.equal(seen.env.CLAUDE_CODE_SUBAGENT_MODEL, 'deepseek-v4.1-flash');
+});
+
+test('the retired ids qwen and alibaba-token are unknown and the message lists the current providers', async () => {
+  for (const old of ['qwen', 'alibaba-token']) {
+    const stderr = sink();
+    const code = await main([old], { stdout: sink(), stderr, platform: 'linux', env: {}, home: await tmp() });
+    assert.equal(code, 1);
+    assert.match(stderr.text(), new RegExp(`Unknown provider "${old}"\\. Available: alibaba, deepseek, ollama, qwencloud`));
+  }
+});
+
+test('stale qwen.env and alibaba-token.env files are ignored by list and by other launches', async () => {
+  const home = await tmp();
+  const opts = { platform: 'linux', env: {}, home };
+  await writeProviderEnv('qwen', { ANTHROPIC_AUTH_TOKEN: 'old-cp' }, opts);
+  await writeProviderEnv('alibaba-token', { ANTHROPIC_AUTH_TOKEN: 'old-tp' }, opts);
+  await writeProviderEnv('deepseek', { ANTHROPIC_AUTH_TOKEN: 'sk' }, opts);
+  const out = sink();
+  assert.equal(await main(['list'], { stdout: out, stderr: sink(), ...opts }), 0);
+  assert.match(out.text(), /deepseek\s+DeepSeek\s+configured/);
+  assert.match(out.text(), /qwencloud\s+Qwen Cloud\s+not configured/);
+  assert.match(out.text(), /alibaba\s+Alibaba Token Plan\s+not configured/);
+  assert.doesNotMatch(out.text(), /old-cp|old-tp/);
+  const launched = [];
+  assert.equal(await main(['deepseek'], { stdout: sink(), stderr: sink(), ...opts, resolveClaudeImpl: () => '/c', launchImpl: async (o) => { launched.push(o); return { code: 0 }; } }), 0);
+  assert.equal(launched[0].env.ANTHROPIC_AUTH_TOKEN, 'sk');
 });

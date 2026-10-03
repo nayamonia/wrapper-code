@@ -125,30 +125,36 @@ test('validateProvider accepts test.headers and test.body objects and rejects no
   assert.throws(() => validateProvider({ ...withBody, test: { ...withBody.test, body: 'raw' } }), /test\.body/);
 });
 
-test('loadCatalog loads qwen with the Alibaba Coding Plan values', async () => {
+test('loadCatalog loads qwencloud with the Qwen Cloud pay-as-you-go values', async () => {
   const catalog = await loadCatalog();
-  const qw = catalog.get('qwen');
-  assert.ok(qw, 'qwen provider present');
-  assert.equal(qw.name, 'Qwen (Alibaba Model Studio)');
-  assert.equal(qw.credential.env, 'ANTHROPIC_AUTH_TOKEN');
-  assert.match(qw.credential.label, /Coding Plan/);
-  assert.equal(qw.env.ANTHROPIC_BASE_URL, 'https://coding-intl.dashscope.aliyuncs.com/apps/anthropic');
-  assert.equal(qw.defaultProfile, 'coding-plan');
-  assert.deepEqual(qw.profiles['coding-plan'].env, {
-    ANTHROPIC_MODEL: 'qwen3.7-plus',
-    ANTHROPIC_DEFAULT_HAIKU_MODEL: 'qwen3.7-plus',
-    ANTHROPIC_DEFAULT_SONNET_MODEL: 'qwen3.7-plus',
-    ANTHROPIC_DEFAULT_OPUS_MODEL: 'qwen3.7-plus',
-    CLAUDE_CODE_SUBAGENT_MODEL: 'qwen3.7-plus',
+  assert.equal(catalog.has('qwen'), false, 'the Coding Plan provider is gone');
+  const qc = catalog.get('qwencloud');
+  assert.ok(qc, 'qwencloud provider present');
+  assert.equal(qc.name, 'Qwen Cloud');
+  assert.equal(qc.docs, 'https://docs.qwencloud.com/developer-guides/clients-and-developer-tools/claude-code');
+  assert.equal(qc.credential.env, 'ANTHROPIC_AUTH_TOKEN');
+  assert.equal(qc.credential.label, 'Qwen Cloud API key');
+  assert.match(qc.credential.help, /home\.qwencloud\.com\/api-keys/);
+  assert.doesNotMatch(qc.credential.help, /Coding Plan/);
+  assert.deepEqual(qc.env, { ANTHROPIC_BASE_URL: 'https://maas.qwencloudapi.com/apps/anthropic' });
+  assert.deepEqual(Object.keys(qc.profiles), ['pay-as-you-go']);
+  assert.equal(qc.defaultProfile, 'pay-as-you-go');
+  assert.deepEqual(qc.profiles['pay-as-you-go'].env, {
+    ANTHROPIC_MODEL: 'auto',
+    ANTHROPIC_DEFAULT_HAIKU_MODEL: 'qwen3.6-flash',
+    ANTHROPIC_DEFAULT_SONNET_MODEL: 'qwen3.8-flash',
+    ANTHROPIC_DEFAULT_OPUS_MODEL: 'qwen3.8-max',
+    CLAUDE_CODE_SUBAGENT_MODEL: 'auto',
+    CLAUDE_CODE_MAX_CONTEXT_TOKENS: '983616',
   });
-  assert.equal(qw.test.method, 'POST');
-  assert.equal(qw.test.path, '/v1/messages');
-  assert.equal(qw.test.auth, 'bearer');
-  assert.equal(qw.test.headers['anthropic-version'], '2023-06-01');
-  assert.equal(qw.test.headers['content-type'], 'application/json');
-  assert.deepEqual(qw.test.body, { model: 'qwen3.7-plus', max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] });
-  assert.equal(qw.editableBaseUrl, false);
-  assert.equal(Object.isFrozen(qw.test.body), true, 'shared body object must not be mutable');
+  assert.equal(qc.test.method, 'POST');
+  assert.equal(qc.test.path, '/v1/messages');
+  assert.equal(qc.test.auth, 'bearer');
+  assert.equal(qc.test.headers['anthropic-version'], '2023-06-01');
+  assert.equal(qc.test.headers['content-type'], 'application/json');
+  assert.deepEqual(qc.test.body, { model: 'qwen3.6-flash', max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] });
+  assert.equal(Object.isFrozen(qc.test.body), true, 'shared body object must not be mutable');
+  assert.equal(qc.editableBaseUrl, false);
 });
 
 const roles = (main, fast) => ({
@@ -159,11 +165,12 @@ const roles = (main, fast) => ({
   CLAUDE_CODE_SUBAGENT_MODEL: fast,
 });
 
-test('loadCatalog loads alibaba-token with the Alibaba Token Plan values and four profiles', async () => {
+test('loadCatalog loads alibaba with the Alibaba Token Plan values and four profiles', async () => {
   const catalog = await loadCatalog();
-  assert.equal(catalog.has('qwen-token'), false, 'renamed to alibaba-token');
-  const qt = catalog.get('alibaba-token');
-  assert.ok(qt, 'alibaba-token provider present');
+  assert.equal(catalog.has('alibaba-token'), false, 'renamed to alibaba');
+  assert.equal(catalog.has('qwen-token'), false);
+  const qt = catalog.get('alibaba');
+  assert.ok(qt, 'alibaba provider present');
   assert.equal(qt.name, 'Alibaba Token Plan');
   assert.equal(qt.credential.env, 'ANTHROPIC_AUTH_TOKEN');
   assert.match(qt.credential.label, /Token Plan/);
@@ -183,10 +190,12 @@ test('loadCatalog loads alibaba-token with the Alibaba Token Plan values and fou
   assert.equal(qt.editableBaseUrl, false);
 });
 
-test('qwen help text tells sk-sp- Token Plan keys to use alibaba-token', async () => {
+test('help texts no longer mention the Coding Plan or the old ids', async () => {
   const catalog = await loadCatalog();
-  const help = catalog.get('qwen').credential.help;
-  assert.match(help, /sk-sp-/);
-  assert.match(help, /alibaba-token/);
-  assert.doesNotMatch(help, /pay-as-you-go sk- key does not work/);
+  const alibaba = catalog.get('alibaba').credential.help;
+  assert.match(alibaba, /sk-sp-/);
+  assert.doesNotMatch(alibaba, /Coding Plan|wrapper-code qwen\b|alibaba-token/);
+  const qwencloud = catalog.get('qwencloud').credential.help;
+  assert.doesNotMatch(qwencloud, /Coding Plan|alibaba-token/);
+  assert.deepEqual([...catalog.keys()].sort(), ['alibaba', 'deepseek', 'ollama', 'qwencloud']);
 });
