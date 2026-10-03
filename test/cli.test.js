@@ -421,3 +421,29 @@ process.exit(0);
   assert.equal(seen.env.ANTHROPIC_MODEL, 'deepseek-v4-pro');
   assert.equal(seen.env.CLAUDE_CODE_SUBAGENT_MODEL, 'deepseek-v4.1-flash');
 });
+
+test('the retired ids qwen and alibaba-token are unknown and the message lists the current providers', async () => {
+  for (const old of ['qwen', 'alibaba-token']) {
+    const stderr = sink();
+    const code = await main([old], { stdout: sink(), stderr, platform: 'linux', env: {}, home: await tmp() });
+    assert.equal(code, 1);
+    assert.match(stderr.text(), new RegExp(`Unknown provider "${old}"\\. Available: alibaba, deepseek, ollama, qwencloud`));
+  }
+});
+
+test('stale qwen.env and alibaba-token.env files are ignored by list and by other launches', async () => {
+  const home = await tmp();
+  const opts = { platform: 'linux', env: {}, home };
+  await writeProviderEnv('qwen', { ANTHROPIC_AUTH_TOKEN: 'old-cp' }, opts);
+  await writeProviderEnv('alibaba-token', { ANTHROPIC_AUTH_TOKEN: 'old-tp' }, opts);
+  await writeProviderEnv('deepseek', { ANTHROPIC_AUTH_TOKEN: 'sk' }, opts);
+  const out = sink();
+  assert.equal(await main(['list'], { stdout: out, stderr: sink(), ...opts }), 0);
+  assert.match(out.text(), /deepseek\s+DeepSeek\s+configured/);
+  assert.match(out.text(), /qwencloud\s+Qwen Cloud\s+not configured/);
+  assert.match(out.text(), /alibaba\s+Alibaba Token Plan\s+not configured/);
+  assert.doesNotMatch(out.text(), /old-cp|old-tp/);
+  const launched = [];
+  assert.equal(await main(['deepseek'], { stdout: sink(), stderr: sink(), ...opts, resolveClaudeImpl: () => '/c', launchImpl: async (o) => { launched.push(o); return { code: 0 }; } }), 0);
+  assert.equal(launched[0].env.ANTHROPIC_AUTH_TOKEN, 'sk');
+});
