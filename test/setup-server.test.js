@@ -768,3 +768,12 @@ test('openrouter: POST /save with a valid key but no model is 400 and writes not
   assert.equal(written.length, 0);
   await stop();
 });
+
+test('openrouter: re-running setup keeps a hand-written subagent model override', async () => {
+  const { post, written, stop } = await bootOpenRouter({ current: { ANTHROPIC_AUTH_TOKEN: 'sk-or-good', WRAPPER_CODE_MODEL: 'openai/gpt-6.1-sol', ANTHROPIC_DEFAULT_HAIKU_MODEL: 'google/gemma-4-it', CLAUDE_CODE_SUBAGENT_MODEL: 'google/gemma-4-it' } });
+  const res = await post('/save', { credential: '', model: 'openai/gpt-6.1-sol', contextLength: 1050000 });
+  assert.equal(res.status, 200, await res.text());
+  assert.equal(written[0].ANTHROPIC_DEFAULT_HAIKU_MODEL, 'google/gemma-4-it');
+  assert.equal(written[0].CLAUDE_CODE_SUBAGENT_MODEL, 'google/gemma-4-it');
+  await stop();
+});

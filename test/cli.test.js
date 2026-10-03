@@ -447,3 +447,58 @@ test('stale qwen.env and alibaba-token.env files are ignored by list and by othe
   assert.equal(await main(['deepseek'], { stdout: sink(), stderr: sink(), ...opts, resolveClaudeImpl: () => '/c', launchImpl: async (o) => { launched.push(o); return { code: 0 }; } }), 0);
   assert.equal(launched[0].env.ANTHROPIC_AUTH_TOKEN, 'sk');
 });
+
+test('list shows openrouter as not configured before setup', async () => {
+  const out = sink();
+  await main(['list'], { stdout: out, stderr: sink(), platform: 'linux', env: {}, home: await tmp() });
+  assert.match(out.text(), /openrouter\s+OpenRouter\s+not configured/);
+});
+
+test('openrouter: a key without a model is not configured and opens setup', async () => {
+  const home = await tmp();
+  const opts = { platform: 'linux', env: {}, home };
+  await writeProviderEnv('openrouter', { ANTHROPIC_AUTH_TOKEN: 'sk-or' }, opts);
+  const setups = [];
+  const code = await main(['openrouter'], {
+    stdout: sink(), stderr: sink(), ...opts,
+    openBrowserImpl: () => true,
+    startSetupServerImpl: async (o) => { setups.push(o); return { url: 'u', done: Promise.resolve({ saved: false, reason: 'cancelled' }), close() {} }; },
+    launchImpl: async () => { throw new Error('must not launch'); },
+  });
+  assert.equal(code, 1);
+  assert.equal(setups[0].provider.id, 'openrouter');
+});
+
+test('end-to-end: openrouter launches a fake claude with the six model keys, the key, the gateway flag and the context window', { skip: isWin }, async () => {
+  const home = await tmp();
+  const binDir = path.join(home, 'fakebin');
+  await mkdir(binDir);
+  const out = path.join(home, 'out.json');
+  const fake = path.join(binDir, 'claude');
+  await writeFile(fake, `#!/usr/bin/env node
+require('fs').writeFileSync(process.env.FAKE_OUT, JSON.stringify({ argv: process.argv.slice(2), env: process.env }));
+process.exit(0);
+`);
+  await chmod(fake, 0o755);
+  await writeProviderEnv('openrouter', { ANTHROPIC_AUTH_TOKEN: 'sk-or-e2e', WRAPPER_CODE_MODEL: 'openai/gpt-6.1-sol', CLAUDE_CODE_AUTO_COMPACT_WINDOW: '1050000' }, { platform: 'linux', env: {}, home });
+  const env = {
+    ...process.env,
+    HOME: home,
+    XDG_CONFIG_HOME: path.join(home, '.config'),
+    PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
+    FAKE_OUT: out,
+    ANTHROPIC_API_KEY: 'must-be-removed',
+  };
+  const result = await run(['openrouter'], env);
+  assert.equal(result.code, 0, result.stderr);
+  const seen = JSON.parse(await readFile(out, 'utf8'));
+  assert.equal(seen.env.ANTHROPIC_BASE_URL, 'https://openrouter.ai/api');
+  assert.equal(seen.env.ANTHROPIC_AUTH_TOKEN, 'sk-or-e2e');
+  assert.equal(seen.env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY, '1');
+  for (const key of ['ANTHROPIC_MODEL', 'ANTHROPIC_DEFAULT_OPUS_MODEL', 'ANTHROPIC_DEFAULT_SONNET_MODEL', 'ANTHROPIC_DEFAULT_HAIKU_MODEL', 'ANTHROPIC_DEFAULT_FABLE_MODEL', 'CLAUDE_CODE_SUBAGENT_MODEL']) {
+    assert.equal(seen.env[key], 'openai/gpt-6.1-sol', key);
+  }
+  assert.equal(seen.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW, '1050000');
+  assert.equal('ANTHROPIC_API_KEY' in seen.env, false);
+  assert.equal('WRAPPER_CODE_MODEL' in seen.env, false);
+});
