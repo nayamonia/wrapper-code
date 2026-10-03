@@ -1,23 +1,24 @@
-// Values from https://www.alibabacloud.com/help/en/model-studio/claude-code (Coding Plan, 2026-10-03).
-// The Coding Plan endpoint has no GET /v1/models, so the key is validated with a
+// Values from https://www.alibabacloud.com/help/en/model-studio/claude-code (Token Plan, 2026-10-03).
+// Token Plan keys start with sk-sp- like Coding Plan keys, but only work on this endpoint.
+// Like the Coding Plan, there is no GET /v1/models, so the key is validated with a
 // one-token POST /v1/messages (costs one output token per setup).
 const MODEL = 'qwen3.7-plus';
 
 export default {
-  id: 'qwen',
-  name: 'Qwen (Alibaba Model Studio)',
+  id: 'qwen-token',
+  name: 'Qwen (Alibaba Token Plan)',
   docs: 'https://www.alibabacloud.com/help/en/model-studio/claude-code',
   credential: {
     env: 'ANTHROPIC_AUTH_TOKEN',
-    label: 'Coding Plan API key',
-    help: 'Model Studio → Coding Plan → API keys (starts with sk-sp-). A Token Plan sk-sp- key goes in wrapper-code qwen-token; pay-as-you-go sk- and sk-ws- keys are not supported.',
+    label: 'Token Plan API key',
+    help: 'Model Studio → Token Plan → API keys (starts with sk-sp-). A Coding Plan key goes in wrapper-code qwen instead.',
   },
   env: {
-    ANTHROPIC_BASE_URL: 'https://coding-intl.dashscope.aliyuncs.com/apps/anthropic',
+    ANTHROPIC_BASE_URL: 'https://token-plan.ap-southeast-1.maas.aliyuncs.com/apps/anthropic',
   },
   profiles: {
-    'coding-plan': {
-      label: 'Coding Plan (international): qwen3.7-plus for every role',
+    'token-plan': {
+      label: 'Token Plan: qwen3.7-plus for every role',
       env: {
         ANTHROPIC_MODEL: MODEL,
         ANTHROPIC_DEFAULT_HAIKU_MODEL: MODEL,
@@ -27,7 +28,7 @@ export default {
       },
     },
   },
-  defaultProfile: 'coding-plan',
+  defaultProfile: 'token-plan',
   test: {
     method: 'POST',
     path: '/v1/messages',
