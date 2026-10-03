@@ -147,3 +147,10 @@ test('discoverModels in ollama format still returns the extended shape with empt
   assert.equal(result.ok, true);
   assert.deepEqual(result.models[2], { name: 'qwen3-code:14b', label: '', parameterSize: '14.8B', contextLength: 40960, tools: true, priceIn: null, priceOut: null });
 });
+
+test('discoverModels in openrouter format treats negative sentinel prices (dynamic routers) as unknown', async () => {
+  const { fetchImpl } = fakeFetch(200, { data: [{ id: 'openrouter/auto-beta', name: 'Auto Router', context_length: 2000000, pricing: { prompt: '-1', completion: '-1' }, supported_parameters: ['tools'] }] });
+  const result = await discoverModels(openrouterProvider, 'https://openrouter.ai/api', { fetchImpl });
+  assert.equal(result.models[0].priceIn, null);
+  assert.equal(result.models[0].priceOut, null);
+});

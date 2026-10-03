@@ -11,7 +11,8 @@ export function describeFetchError(err) {
 function price(value) {
   if (value === undefined || value === null || value === '') return null;
   const n = Number(value) * 1e6;
-  return Number.isFinite(n) ? Math.round(n * 1e6) / 1e6 : null;
+  // OpenRouter prices dynamic routers (openrouter/auto-beta, ...) as "-1": unknown, not negative.
+  return Number.isFinite(n) && n >= 0 ? Math.round(n * 1e6) / 1e6 : null;
 }
 
 function normalizeOllama(entry, requireCapability) {
