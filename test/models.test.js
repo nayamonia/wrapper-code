@@ -60,3 +60,27 @@ test('discoverModels treats a response without a models array as an error', asyn
   assert.equal(result.ok, false);
   assert.match(result.message, /unexpected response/i);
 });
+
+test('discoverModels skips non-object entries and entries with non-string names', async () => {
+  const { fetchImpl } = fakeFetch(200, {
+    models: [null, 5, 'x', { name: { a: 1 } }, { name: 'ok' }],
+  });
+  const result = await discoverModels(ollama, 'http://localhost:11434', { fetchImpl });
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.models, [
+    { name: 'ok', parameterSize: '', contextLength: null, tools: null },
+  ]);
+});
+
+test('discoverModels includes err.cause details in the message when present', async () => {
+  const fetchImpl = async () => {
+    const cause = Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' });
+    throw Object.assign(new TypeError('fetch failed'), { cause });
+  };
+  const result = await discoverModels(ollama, 'http://localhost:9', { fetchImpl });
+  assert.equal(result.ok, false);
+  assert.equal(result.status, 0);
+  assert.match(result.message, /http:\/\/localhost:9/);
+  assert.match(result.message, /fetch failed/);
+  assert.match(result.message, /ECONNREFUSED/);
+});
