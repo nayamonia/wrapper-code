@@ -11,10 +11,12 @@ const MAX_BODY = 64 * 1024;
 
 export async function testCredential(provider, credential, { fetchImpl = globalThis.fetch, testUrl, timeoutMs = 15000, baseUrl } = {}) {
   const url = testUrl || provider.test.url || joinUrl(baseUrl || provider.env.ANTHROPIC_BASE_URL, provider.test.path);
-  const headers = {};
+  const headers = { ...(provider.test.headers || {}) };
   if (provider.test.auth === 'bearer' && credential) headers.Authorization = `Bearer ${credential}`;
+  const init = { method: provider.test.method || 'GET', headers, signal: AbortSignal.timeout(timeoutMs) };
+  if (provider.test.body !== undefined) init.body = JSON.stringify(provider.test.body);
   try {
-    const res = await fetchImpl(url, { method: provider.test.method || 'GET', headers, signal: AbortSignal.timeout(timeoutMs) });
+    const res = await fetchImpl(url, init);
     if (res.ok) return { ok: true };
     let message = res.statusText || `HTTP ${res.status}`;
     try {
