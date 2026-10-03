@@ -145,17 +145,26 @@
     return el ? el.value : current.profile;
   }
 
+  var rendered = false;
   function renderModels(discovery) {
     var list = $('models');
     var status = $('models-status');
-    list.textContent = '';
     status.className = 'status';
     if (!discovery.ok) {
+      // Keep any existing list and selection; only the status line changes.
       status.className = 'status err';
       status.textContent = discovery.message;
+      if (!rendered && current.model) $('otherModel').value = current.model;
+      rendered = true;
       renderAdvanced();
       return;
     }
+    var prev = null;
+    if (rendered) {
+      var was = document.querySelector('input[name=model]:checked');
+      prev = was ? was.value : null;
+    }
+    list.textContent = '';
     var found = discovery.models.length;
     status.textContent = found ? found + ' model' + (found === 1 ? '' : 's') + ' installed' : 'No models installed. Run: ollama pull qwen3-coder';
     discovery.models.forEach(function (m) {
@@ -165,7 +174,7 @@
       radio.type = 'radio'; radio.name = 'model'; radio.value = m.name;
       radio.disabled = m.tools === false;
       if (m.contextLength) radio.setAttribute('data-context', String(m.contextLength));
-      radio.checked = m.name === current.model && !radio.disabled;
+      radio.checked = (rendered ? m.name === prev : m.name === current.model) && !radio.disabled;
       radio.addEventListener('change', function () { $('otherModel').value = ''; renderAdvanced(); });
       var text = document.createElement('div');
       var strong = document.createElement('div'); strong.textContent = m.name;
@@ -179,7 +188,8 @@
       label.appendChild(radio); label.appendChild(text);
       list.appendChild(label);
     });
-    if (current.model && !document.querySelector('input[name=model]:checked')) $('otherModel').value = current.model;
+    if (!rendered && current.model && !document.querySelector('input[name=model]:checked')) $('otherModel').value = current.model;
+    rendered = true;
     renderAdvanced();
   }
 
@@ -195,12 +205,14 @@
   function renderAdvanced() {
     var env;
     if (isModels) {
-      var model = selectedModel().name || '<model>';
+      var picked = selectedModel();
+      var model = picked.name || '<model>';
       env = {};
       Object.keys(provider.env || {}).forEach(function (k) { env[k] = provider.env[k]; });
       var typedUrl = $('baseUrl').value.trim().replace(/\/+$/, '');
       if (typedUrl) env.ANTHROPIC_BASE_URL = typedUrl;
       provider.models.envKeys.forEach(function (k) { env[k] = model; });
+      if (picked.contextLength) env.CLAUDE_CODE_AUTO_COMPACT_WINDOW = String(picked.contextLength);
     } else {
       env = provider.profiles[selectedProfile()].env;
     }
@@ -220,6 +232,8 @@
     $('refresh').addEventListener('click', function () {
       $('models-status').className = 'status';
       $('models-status').textContent = 'Refreshing…';
+      var btn = $('refresh');
+      btn.disabled = true;
       fetch('/models?baseUrl=' + encodeURIComponent($('baseUrl').value), { headers: { 'x-setup-token': token } })
         .then(function (res) {
           return res.text().then(function (text) {
@@ -231,8 +245,8 @@
             return body;
           });
         })
-        .then(renderModels)
-        .catch(function (err) { renderModels({ ok: false, message: err.message }); });
+        .then(function (d) { btn.disabled = false; renderModels(d); })
+        .catch(function (err) { btn.disabled = false; renderModels({ ok: false, message: err.message }); });
     });
     renderModels(setup.discovery);
   } else {
