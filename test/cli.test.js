@@ -317,3 +317,24 @@ test('list shows ollama alongside deepseek', async () => {
   await main(['list'], { stdout: out, stderr: sink(), platform: 'linux', env: {}, home: await tmp() });
   assert.match(out.text(), /ollama\s+Ollama\s+not configured/);
 });
+
+test('launch on a color TTY shows the 8-bit splash instead of the one-line banner', async () => {
+  const home = await tmp();
+  const opts = { platform: 'linux', env: { COLORTERM: 'truecolor', TERM: 'xterm-256color' }, home };
+  await writeProviderEnv('deepseek', { ANTHROPIC_AUTH_TOKEN: 'sk', WRAPPER_CODE_PROFILE: 'v4-pro' }, opts);
+  const chunks = [];
+  const stdout = { isTTY: true, columns: 120, write: (s) => { chunks.push(String(s)); return true; } };
+  const code = await main(['deepseek'], {
+    stdout, stderr: sink(), ...opts,
+    resolveClaudeImpl: () => '/c',
+    launchImpl: async () => ({ code: 0 }),
+    sleepImpl: async () => {},
+  });
+  assert.equal(code, 0);
+  const text = chunks.join('');
+  assert.ok(text.includes('▀'), 'sprite half-blocks present');
+  const plain = text.replace(/\x1b\[[0-9;]*m/g, '');
+  assert.match(plain, /DeepSeek · v4-pro/);
+  assert.match(plain, /starting claude/);
+  assert.doesNotMatch(plain, /wrapper-code \d+\.\d+\.\d+ · DeepSeek \(v4-pro\)/, 'plain banner not printed');
+});
