@@ -10,7 +10,7 @@ export default {
   credential: {
     env: 'ANTHROPIC_AUTH_TOKEN',
     label: 'Coding Plan API key',
-    help: 'Model Studio → Coding Plan → API keys. A pay-as-you-go sk- key does not work on this endpoint.',
+    help: 'Model Studio → Coding Plan → API keys (starts with sk-sp-). A Token Plan sk-sp- key goes in wrapper-code alibaba-token; pay-as-you-go sk- and sk-ws- keys are not supported.',
   },
   env: {
     ANTHROPIC_BASE_URL: 'https://coding-intl.dashscope.aliyuncs.com/apps/anthropic',
