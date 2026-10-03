@@ -1,7 +1,5 @@
 # wrapper-code
 
-<p><sub>The 8-bit splash you see for a moment before Claude Code starts.</sub></p>
-
 Run the [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI harness with other LLM providers, without touching your Claude Code configuration.
 
 `wrapper-code deepseek` opens a normal interactive Claude Code session that talks to DeepSeek. Running `claude` directly still uses Anthropic, exactly as before. Nothing is written under `~/.claude`, and no variable leaks into your shell: the provider settings exist only inside that one session.
