@@ -189,6 +189,19 @@
       list.appendChild(label);
     });
     if (!rendered && current.model && !document.querySelector('input[name=model]:checked')) $('otherModel').value = current.model;
+    // A typed name that exactly matches a selectable listed model becomes that selection,
+    // so its context length is sent instead of being silently dropped.
+    var typedName = $('otherModel').value.trim();
+    if (typedName) {
+      var radios = document.querySelectorAll('input[name=model]');
+      for (var i = 0; i < radios.length; i++) {
+        if (radios[i].value === typedName && !radios[i].disabled) {
+          radios[i].checked = true;
+          $('otherModel').value = '';
+          break;
+        }
+      }
+    }
     rendered = true;
     renderAdvanced();
   }

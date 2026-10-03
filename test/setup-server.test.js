@@ -88,6 +88,25 @@ test('POST /save with a valid key writes the file and resolves done', async () =
   api.close();
 });
 
+test('POST /save 200 closes the connection and the client reads the full body before done resolves', async () => {
+  const { server, post, api } = await boot();
+  const res = await post('/save', { credential: 'sk-test', profile: 'v4-pro' });
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('connection'), 'close');
+  assert.deepEqual(await res.json(), { ok: true });
+  assert.equal((await server.done).saved, true);
+  api.close();
+});
+
+test('POST /cancel 200 closes the connection and the body arrives intact', async () => {
+  const { server, post, api } = await boot();
+  const res = await post('/cancel', {});
+  assert.equal(res.headers.get('connection'), 'close');
+  assert.deepEqual(await res.json(), { ok: true });
+  assert.equal((await server.done).reason, 'cancelled');
+  api.close();
+});
+
 test('POST /save trims whitespace and newlines around the credential', async () => {
   const { post, written, stop } = await boot();
   await post('/save', { credential: '  sk-trim \n', profile: 'flash-1m' });

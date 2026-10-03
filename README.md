@@ -19,7 +19,7 @@ Works on macOS, Linux and Windows.
 ```bash
 wrapper-code deepseek              # launch Claude Code with DeepSeek
 wrapper-code ollama                # launch Claude Code with a local Ollama model
-wrapper-code ollama --model gemma3 # override the saved default for one session
+wrapper-code ollama --model gemma3 # use another main model for this session only
 wrapper-code deepseek --resume     # anything after the provider is passed to claude
 wrapper-code setup deepseek        # change the API key or model profile
 wrapper-code list                  # providers and whether they are configured
@@ -34,13 +34,17 @@ The first time you launch a provider, a setup page opens in your browser on `127
 | `deepseek` | API key. Profiles: `flash-1m` (default): DeepSeek Flash with 1M context. `v4-pro`: DeepSeek V4 Pro as main model, Flash for subagents. | [DeepSeek × Claude Code](https://api-docs.deepseek.com/quick_start/agent_integrations/claude_code/) |
 | `ollama` | No key. The setup page lists the models installed in your local Ollama (default `http://localhost:11434`, editable for a remote server) and saves one as the default. Models without tool support are shown but cannot be selected. Runs Qwen Coder, Gemma, Llama, Mistral and any other Ollama model, offline. | [Ollama × Claude Code](https://docs.ollama.com/integrations/claude-code) |
 
-Ollama recommends models with a context window of 64k tokens or more for larger repositories. The wrapper saves the selected model's context length as `CLAUDE_CODE_AUTO_COMPACT_WINDOW` so Claude Code compacts the conversation before the window overflows.
+Claude Code's system prompt and tools can exceed 32k tokens, and Ollama serves requests at its own runtime context (`OLLAMA_CONTEXT_LENGTH`, often 32k or less by default), not at the model's maximum. A request that does not fit is silently truncated and the model seems to ignore the prompt. Set Ollama's served context to at least 64k on the Ollama side, for example `OLLAMA_CONTEXT_LENGTH=65536 ollama serve`, or the context-length setting in the Ollama app.
+
+The wrapper saves the selected model's maximum context length as `CLAUDE_CODE_AUTO_COMPACT_WINDOW` so Claude Code compacts the conversation before the window overflows. That is the model's maximum, not what your server is configured to serve.
+
+`--model` overrides the main model for that session only; subagents and background tasks keep using the saved model.
 
 More online providers (Qwen via Alibaba Model Studio, Kimi, GLM, MiniMax) are planned. A provider is a single data file in `src/providers/`; pull requests welcome.
 
 ## Where things are stored
 
-One file per provider, containing only your choices (key and profile; for Ollama, model and context). For Ollama the file holds the model and the context snapshot, plus the base URL only if it differs from the default `http://localhost:11434`:
+One file per provider, containing only your choices: the key and profile for DeepSeek; for Ollama the model, the context snapshot, and the base URL only if it differs from the default `http://localhost:11434`:
 
 - macOS / Linux: `~/.config/wrapper-code/<provider>.env` (or `$XDG_CONFIG_HOME/wrapper-code/`), mode `600`
 - Windows: `%APPDATA%\wrapper-code\<provider>.env`
@@ -50,8 +54,8 @@ Model names and the other variables come from the built-in catalog on every laun
 ## How it works
 
 1. Reads the provider definition (base URL, model variables, how to test a key).
-2. Reads your `<provider>.env`; runs the setup page if the key is missing.
-3. Builds an environment: your shell env + provider vars + profile vars + your file. `ANTHROPIC_API_KEY` is removed so Claude Code cannot fall back to Anthropic auth.
+2. Reads your `<provider>.env`; runs the setup page if the key or model is missing.
+3. Builds an environment: your shell env + provider vars + profile vars (for Ollama, your saved model in the model variables) + your file. `ANTHROPIC_API_KEY` is removed so Claude Code cannot fall back to Anthropic auth.
 4. Finds `claude` on your `PATH` and runs it with that environment, forwarding your arguments and its exit code.
 
 Your global `~/.claude` (CLAUDE.md, skills, plugins, MCP servers, history) is shared with the provider session, since only environment variables change.

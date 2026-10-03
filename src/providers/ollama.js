@@ -19,7 +19,7 @@ export default {
       'ANTHROPIC_DEFAULT_HAIKU_MODEL',
       'CLAUDE_CODE_SUBAGENT_MODEL',
     ],
-    note: 'Ollama recommends a context window of 64k tokens or more for larger repositories. Use --model on the command line to override the default for one session.',
+    note: 'Ollama serves requests at its own context length, not the model maximum: start it with OLLAMA_CONTEXT_LENGTH=65536 or more. --model on the command line overrides the main model for one session only.',
   },
   test: { method: 'GET', path: '/api/tags', auth: 'none' },
   editableBaseUrl: true,

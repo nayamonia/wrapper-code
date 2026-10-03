@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { discoverModels, joinUrl } from '../src/setup/models.js';
+import { discoverModels, joinUrl, describeFetchError } from '../src/setup/models.js';
 import ollama from '../src/providers/ollama.js';
 
 const TAGS = {
@@ -83,4 +83,22 @@ test('discoverModels includes err.cause details in the message when present', as
   assert.match(result.message, /http:\/\/localhost:9/);
   assert.match(result.message, /fetch failed/);
   assert.match(result.message, /ECONNREFUSED/);
+});
+
+test('describeFetchError: plain error has no suffix', () => {
+  assert.equal(describeFetchError(new Error('boom')), 'boom');
+});
+
+test('describeFetchError: cause code is appended', () => {
+  assert.equal(describeFetchError(new TypeError('fetch failed', { cause: { code: 'ECONNREFUSED' } })), 'fetch failed (ECONNREFUSED)');
+});
+
+test('describeFetchError: cause with only a message uses it', () => {
+  assert.equal(describeFetchError(new TypeError('fetch failed', { cause: new Error('socket hang up') })), 'fetch failed (socket hang up)');
+});
+
+test('describeFetchError: cause with neither code nor message never prints undefined', () => {
+  const out = describeFetchError(new TypeError('fetch failed', { cause: {} }));
+  assert.equal(out, 'fetch failed');
+  assert.doesNotMatch(out, /undefined/);
 });

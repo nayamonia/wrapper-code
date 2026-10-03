@@ -2,6 +2,11 @@ export function joinUrl(baseUrl, path) {
   return `${String(baseUrl).replace(/\/+$/, '')}${path}`;
 }
 
+export function describeFetchError(err) {
+  const reason = err?.cause?.code || err?.cause?.message;
+  return reason ? `${err.message} (${reason})` : String(err?.message);
+}
+
 function normalize(entry, requireCapability) {
   const details = entry.details || {};
   const caps = Array.isArray(entry.capabilities) ? entry.capabilities : null;
@@ -21,12 +26,7 @@ export async function discoverModels(provider, baseUrl, { fetchImpl = globalThis
   try {
     res = await fetchImpl(url, { method: 'GET', signal: AbortSignal.timeout(timeoutMs) });
   } catch (err) {
-    let message = `Could not reach ${url}: ${err.message}`;
-    if (err.cause) {
-      const causeReason = err.cause.code || err.cause.message;
-      message += ` (${causeReason})`;
-    }
-    return { ok: false, status: 0, message };
+    return { ok: false, status: 0, message: `Could not reach ${url}: ${describeFetchError(err)}` };
   }
   if (!res.ok) return { ok: false, status: res.status, message: `${url} answered HTTP ${res.status}` };
   let body;

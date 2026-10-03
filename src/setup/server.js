@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { derivedEnv } from '../env.js';
 import { CREDITS } from '../credits.js';
-import { discoverModels, joinUrl } from './models.js';
+import { describeFetchError, discoverModels, joinUrl } from './models.js';
 
 const PAGE_URL = new URL('./page.html', import.meta.url);
 const MAX_BODY = 64 * 1024;
@@ -24,10 +24,7 @@ export async function testCredential(provider, credential, { fetchImpl = globalT
     }
     return { ok: false, status: res.status, message };
   } catch (err) {
-    let message = `Could not reach ${url}: ${err.message}`;
-    const reason = err.cause?.code || err.cause?.message;
-    if (reason) message += ` (${reason})`;
-    return { ok: false, status: 0, message };
+    return { ok: false, status: 0, message: `Could not reach ${url}: ${describeFetchError(err)}` };
   }
 }
 
@@ -47,8 +44,8 @@ function readBody(req) {
   });
 }
 
-function sendJson(res, status, body) {
-  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+function sendJson(res, status, body, headers = {}) {
+  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...headers });
   res.end(JSON.stringify(body));
 }
 
@@ -104,6 +101,7 @@ export async function startSetupServer({
   const done = new Promise((resolve) => { resolveDone = resolve; });
   let finished = false;
   let saving = false;
+  let closing = false;
   let timer;
 
   const finish = (result) => {
@@ -111,10 +109,20 @@ export async function startSetupServer({
     finished = true;
     clearTimeout(timer);
     resolveDone(result);
-    setImmediate(() => {
-      server.closeAllConnections?.();
-      server.close();
-    });
+    server.close();
+    setTimeout(() => server.closeAllConnections?.(), 1000).unref();
+  };
+  // Resolve only after the final response is flushed, so the client always reads it.
+  const finishAfter = (res, result) => {
+    closing = true;
+    let called = false;
+    const go = () => {
+      if (called) return;
+      called = true;
+      finish(result);
+    };
+    res.once('finish', go);
+    res.once('close', go);
   };
   const touch = () => {
     clearTimeout(timer);
@@ -151,13 +159,13 @@ export async function startSetupServer({
     }
 
     if (req.method === 'POST' && url.pathname === '/cancel') {
-      sendJson(res, 200, { ok: true });
-      finish({ saved: false, reason: 'cancelled' });
+      sendJson(res, 200, { ok: true }, { connection: 'close' });
+      finishAfter(res, { saved: false, reason: 'cancelled' });
       return;
     }
 
     if (req.method === 'POST' && url.pathname === '/save') {
-      if (finished) {
+      if (finished || closing) {
         sendJson(res, 409, { ok: false, status: 0, message: 'Setup already finished' });
         return;
       }
@@ -217,7 +225,7 @@ export async function startSetupServer({
         }
         const baseUrl = effectiveBaseUrl(provider, values);
         const result = await testCredential(provider, credential, { fetchImpl, testUrl, timeoutMs: credentialTimeoutMs, baseUrl });
-        if (finished) {
+        if (finished || closing) {
           sendJson(res, 409, { ok: false, status: 0, message: 'Setup already finished' });
           return;
         }
@@ -231,8 +239,8 @@ export async function startSetupServer({
           sendJson(res, 500, { ok: false, status: 0, message: err.message });
           return;
         }
-        sendJson(res, 200, { ok: true });
-        finish({ saved: true, values });
+        sendJson(res, 200, { ok: true }, { connection: 'close' });
+        finishAfter(res, { saved: true, values });
         return;
       } finally {
         saving = false;
