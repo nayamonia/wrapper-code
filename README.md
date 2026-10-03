@@ -18,6 +18,8 @@ Works on macOS, Linux and Windows.
 
 ```bash
 wrapper-code deepseek              # launch Claude Code with DeepSeek
+wrapper-code ollama                # launch Claude Code with a local Ollama model
+wrapper-code ollama --model gemma3 # override the saved default for one session
 wrapper-code deepseek --resume     # anything after the provider is passed to claude
 wrapper-code setup deepseek        # change the API key or model profile
 wrapper-code list                  # providers and whether they are configured
@@ -27,15 +29,18 @@ The first time you launch a provider, a setup page opens in your browser on `127
 
 ## Providers
 
-| Provider | Profiles | Docs |
+| Provider | Setup | Docs |
 |---|---|---|
-| `deepseek` | `flash-1m` (default): DeepSeek Flash with 1M context. `v4-pro`: DeepSeek V4 Pro as main model, Flash for subagents. | [DeepSeek × Claude Code](https://api-docs.deepseek.com/quick_start/agent_integrations/claude_code/) |
+| `deepseek` | API key. Profiles: `flash-1m` (default): DeepSeek Flash with 1M context. `v4-pro`: DeepSeek V4 Pro as main model, Flash for subagents. | [DeepSeek × Claude Code](https://api-docs.deepseek.com/quick_start/agent_integrations/claude_code/) |
+| `ollama` | No key. The setup page lists the models installed in your local Ollama (default `http://localhost:11434`, editable for a remote server) and saves one as the default. Models without tool support are shown but cannot be selected. Runs Qwen Coder, Gemma, Llama, Mistral and any other Ollama model, offline. | [Ollama × Claude Code](https://docs.ollama.com/integrations/claude-code) |
 
-More providers (Qwen Coder, Gemma, Llama, Mistral, local runtimes such as Ollama) are planned. A provider is a single data file in `src/providers/`; pull requests welcome.
+Ollama recommends models with a context window of 64k tokens or more for larger repositories. The wrapper saves the selected model's context length as `CLAUDE_CODE_AUTO_COMPACT_WINDOW` so Claude Code compacts the conversation before the window overflows.
+
+More online providers (Qwen via Alibaba Model Studio, Kimi, GLM, MiniMax) are planned. A provider is a single data file in `src/providers/`; pull requests welcome.
 
 ## Where things are stored
 
-One file per provider, containing only your choices (key and profile):
+One file per provider, containing only your choices (key and profile; for Ollama, model and context). For Ollama the file holds the model and the context snapshot, plus the base URL only if it differs from the default `http://localhost:11434`:
 
 - macOS / Linux: `~/.config/wrapper-code/<provider>.env` (or `$XDG_CONFIG_HOME/wrapper-code/`), mode `600`
 - Windows: `%APPDATA%\wrapper-code\<provider>.env`
