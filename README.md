@@ -65,6 +65,7 @@ Your global `~/.claude` (CLAUDE.md, skills, plugins, MCP servers, history) is sh
 - `~/.claude` is shared, so `env` entries in `~/.claude/settings.json` (and any `apiKeyHelper`) still apply inside the provider session and can override the provider variables. If a session talks to the wrong backend, check there first.
 - Ctrl+C is passed through to `claude`; the wrapper itself keeps running until `claude` exits.
 - If a provider file is broken (for example a pasted bare key), `wrapper-code setup <provider>` replaces it with a fresh one.
+- Before `claude` starts, wrapper-code shows a sub-second 8-bit splash. It only appears on a color terminal at least 72 columns wide. Set `WRAPPER_CODE_NO_SPLASH=1` (or the standard `NO_COLOR`) to skip it.
 
 ## Development
 
