@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { derivedEnv } from '../env.js';
 import { CREDITS } from '../credits.js';
 import { describeFetchError, discoverModels, joinUrl } from './models.js';
+import { SPRITE, wordmarkRows, renderSvg, faviconDataUri } from '../brand.js';
 
 const PAGE_URL = new URL('./page.html', import.meta.url);
 const MAX_BODY = 64 * 1024;
@@ -48,6 +49,19 @@ function sendJson(res, status, body, headers = {}) {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...headers });
   res.end(JSON.stringify(body));
 }
+
+export function injectBrand(template, { sprite, wordmark, favicon }) {
+  return template
+    .replace('__BRAND_SPRITE__', () => sprite)
+    .replace('__BRAND_WORDMARK__', () => wordmark)
+    .replace('__FAVICON__', () => favicon);
+}
+
+const BRAND = {
+  sprite: renderSvg(SPRITE, { className: 'pix' }),
+  wordmark: renderSvg(wordmarkRows('WRAPPER-CODE'), { className: 'pix' }),
+  favicon: faviconDataUri(),
+};
 
 function effectiveBaseUrl(provider, current, typed) {
   return String(typed || '').trim() || current.ANTHROPIC_BASE_URL || provider.env.ANTHROPIC_BASE_URL || '';
@@ -96,6 +110,7 @@ export async function startSetupServer({
 }) {
   const token = randomBytes(32).toString('hex');
   const template = await readFile(PAGE_URL, 'utf8');
+  const branded = injectBrand(template, BRAND);
 
   let resolveDone;
   const done = new Promise((resolve) => { resolveDone = resolve; });
@@ -149,7 +164,7 @@ export async function startSetupServer({
       const payload = await pagePayload(provider, current, token, { fetchImpl, discoveryTimeoutMs });
       const json = JSON.stringify(payload).replace(/<\//g, '<\\/');
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
-      res.end(template.replace('__SETUP_JSON__', () => json));
+      res.end(branded.replace('__SETUP_JSON__', () => json));
       return;
     }
 

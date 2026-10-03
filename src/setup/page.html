@@ -4,31 +4,34 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>wrapper-code setup</title>
+<link rel="icon" href="__FAVICON__">
 <style>
-  :root { color-scheme: light dark; --bg: #f6f7f9; --card: #fff; --fg: #1b1f24; --muted: #6a737d; --line: #d9dde2; --accent: #2563eb; --ok: #15803d; --err: #b91c1c; }
-  @media (prefers-color-scheme: dark) { :root { --bg: #0f1115; --card: #171a21; --fg: #e6e8eb; --muted: #9aa3ad; --line: #2b313b; --accent: #60a5fa; --ok: #4ade80; --err: #f87171; } }
+  :root { color-scheme: light dark; --bg: #f6f3ff; --card: #ffffff; --fg: #1b1b3a; --muted: #6a6a8a; --line: #cfcbe6; --ink: #1b1b3a; --accent: #ff2d95; --accent-2: #12b5b9; --ok: #15803d; --err: #b91c1c; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0b0b14; --card: #15152a; --fg: #e6e8eb; --muted: #8a8aa3; --line: #2b2b4a; --ink: #1b1b3a; --accent: #ff2d95; --accent-2: #2de2e6; --ok: #4ade80; --err: #f87171; } }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
   main { max-width: 640px; margin: 40px auto; padding: 0 16px; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 24px; }
-  h1 { font-size: 22px; margin: 0 0 4px; }
-  .sub { color: var(--muted); margin: 0 0 20px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 0; padding: 24px; }
+  h1 { font: 700 12px/1 ui-monospace, Menlo, Consolas, monospace; letter-spacing: .25em; text-transform: uppercase; color: var(--accent-2); margin: 8px 0 2px; }
+  .sub { color: var(--muted); margin: 0 0 20px; font-size: 13px; }
   label { display: block; font-weight: 600; margin: 16px 0 6px; }
   .help { color: var(--muted); font-size: 13px; margin: 4px 0 0; }
-  input[type=text], input[type=password] { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--fg); font-size: 15px; }
+  input[type=text], input[type=password] { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 0; background: transparent; color: var(--fg); font-size: 15px; }
   .row { display: flex; gap: 8px; align-items: center; }
   .row input { flex: 1; }
-  button { padding: 10px 16px; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: var(--fg); cursor: pointer; font-size: 14px; }
-  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button { padding: 10px 16px; border-radius: 0; border: 1px solid var(--line); background: transparent; color: var(--fg); cursor: pointer; font-size: 14px; }
+  button.primary { background: var(--accent); border-color: var(--ink); color: #0b0b14; font-weight: 700; box-shadow: 3px 3px 0 var(--ink); }
+  button.primary:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
   button:disabled { opacity: .6; cursor: default; }
-  .profile { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 8px; cursor: pointer; }
+  .profile { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 0; margin-bottom: 8px; cursor: pointer; }
+  .profile:has(input:checked) { border-color: var(--accent); box-shadow: 2px 2px 0 var(--accent); }
   .profile input { margin-top: 4px; }
   .profile code { color: var(--muted); font-size: 12px; }
   details { margin-top: 16px; }
   summary { cursor: pointer; color: var(--muted); }
-  pre { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow: auto; font-size: 12px; }
+  pre { background: var(--bg); border: 1px solid var(--line); border-radius: 0; padding: 12px; overflow: auto; font-size: 12px; }
   .actions { display: flex; gap: 8px; margin-top: 20px; }
-  .msg { margin-top: 16px; padding: 10px 12px; border-radius: 8px; display: none; }
+  .msg { margin-top: 16px; padding: 10px 12px; border-radius: 0; display: none; }
   .msg.ok { display: block; background: color-mix(in srgb, var(--ok) 12%, transparent); color: var(--ok); }
   .msg.err { display: block; background: color-mix(in srgb, var(--err) 12%, transparent); color: var(--err); }
   a { color: var(--accent); }
@@ -37,13 +40,25 @@
   .profile.off { opacity: .55; cursor: not-allowed; }
   .status { color: var(--muted); font-size: 13px; }
   .status.err { color: var(--err); }
+  :focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
+  .brand { display: flex; align-items: center; gap: 16px; margin-bottom: 4px; }
+  .brand-sprite svg { width: 64px; height: 64px; display: block; }
+  .brand-wordmark svg { width: 200px; height: 20px; display: block; }
+  .brand-wordmark svg rect { fill: var(--fg); }
+  .brand-text { display: flex; flex-direction: column; }
 </style>
 </head>
 <body>
 <main>
   <div class="card">
-    <h1 id="title"></h1>
-    <p class="sub">wrapper-code · <a id="docs" target="_blank" rel="noopener">provider documentation</a></p>
+    <header class="brand">
+      <div class="brand-sprite" aria-hidden="true">__BRAND_SPRITE__</div>
+      <div class="brand-text">
+        <div class="brand-wordmark" role="img" aria-label="wrapper-code">__BRAND_WORDMARK__</div>
+        <h1 id="title"></h1>
+      </div>
+    </header>
+    <p class="sub"><a id="docs" target="_blank" rel="noopener">provider documentation</a></p>
     <form id="form">
       <div id="credential-block">
         <label for="credential" id="credential-label"></label>
