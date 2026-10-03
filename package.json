@@ -6,7 +6,7 @@
   "bin": { "wrapper-code": "./bin/wrapper-code.js" },
   "files": ["bin", "src", "README.md", "LICENSE"],
   "engines": { "node": ">=18" },
-  "scripts": { "test": "node --test" },
+  "scripts": { "test": "node --test", "brand:svg": "node scripts/render-splash-svg.mjs" },
   "keywords": ["claude-code", "deepseek", "llm", "cli", "wrapper"],
   "author": { "name": "Gabriel Fernandes", "email": "gabriel@cd2.com.br", "url": "https://cd2.com.br" },
   "repository": { "type": "git", "url": "git+https://github.com/nayamonia/wrapper-code.git" },

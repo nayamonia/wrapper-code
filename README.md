@@ -1,3 +1,6 @@
+<p align="center"><img src="https://raw.githubusercontent.com/nayamonia/wrapper-code/main/assets/splash.svg" alt="wrapper-code: pixel mascot, WRAPPER-CODE wordmark and the launch bar" width="720"></p>
+<p align="center"><sub>The 8-bit splash you see for a moment before Claude Code starts.</sub></p>
+
 # wrapper-code
 
 Run the [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI harness with other LLM providers, without touching your Claude Code configuration.
