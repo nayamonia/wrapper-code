@@ -33,7 +33,7 @@ export function renderSite({ catalog, version }) {
   const providers = [...catalog.values()];
   const chips = providers.map((p) => `<span class="chip">${esc(p.name)}</span>`).join('');
   const rows = providers.map(providerRow).join('\n');
-  const firstId = providers[0]?.id ?? 'deepseek';
+  const exampleId = catalog.has('deepseek') ? 'deepseek' : (providers[0]?.id ?? 'deepseek');
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -94,7 +94,7 @@ export function renderSite({ catalog, version }) {
     <div class="sprite" aria-hidden="true">${renderSvg(SPRITE)}</div>
     <h1>Run Claude Code with any LLM</h1>
     <p class="lead">One command, your provider, zero changes to your Claude Code configuration. The provider's settings live only inside that session.</p>
-    <div class="install" id="install"><span class="p">$</span> npm install -g wrapper-code<br><span class="p">$</span> wrapper-code ${esc(firstId)}</div>
+    <div class="install" id="install"><span class="p">$</span> npm install -g wrapper-code<br><span class="p">$</span> wrapper-code ${esc(exampleId)}</div>
     <div class="chips">${chips}</div>
   </section>
 
