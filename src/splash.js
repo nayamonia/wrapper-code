@@ -16,23 +16,50 @@ export function shouldSplash({ stdout, env }) {
 
 const host = (url) => new URL(url).host;
 
+function stripAnsi(s) {
+  return s.replace(/\x1b\[[0-9;]*m/g, '');
+}
+
 export function splashLines({ version, providerName, selection, truecolor }) {
   const c = (name, text) => `${ansi(name, { truecolor })}${text}${RESET}`;
   const sprite = renderHalfBlocks(SPRITE, { truecolor });          // 8 lines
   const wordmark = renderHalfBlocks(wordmarkRows('WRAPPER-CODE'), { truecolor }); // 3 lines
   const who = `${CREDITS.license} · ${CREDITS.name} · ${host(CREDITS.site)}`;
-  const what = selection ? `${providerName} · ${selection}` : providerName;
+
+  // Build provider · selection string, handling undefined/empty values
+  const provName = providerName || '';
+  const what = selection ? `${provName} · ${selection}` : provName;
+
+  // Compute available width for the version line (line 4: index 4 of right array)
+  // Structure: "  " (2) + sprite (16) + "   " (3) + text = 21 + text
+  const spriteColWidth = 21;
+  const availableWidth = SPLASH_WIDTH - spriteColWidth;
+
+  // Build version prefix: "v{version}  " (with 2 spaces)
+  const versionText = version ? `v${version}` : '';
+  const versionPrefix = versionText ? `${versionText}  ` : '';
+  const versionPrefixLen = stripAnsi(versionPrefix).length;
+
+  // Truncate what if needed
+  let displayWhat = what;
+  const availableForWhat = availableWidth - versionPrefixLen;
+  if (stripAnsi(what).length > availableForWhat && availableForWhat > 1) {
+    displayWhat = stripAnsi(what).slice(0, availableForWhat - 1) + '…';
+  }
+
+  // Build the bar function
   const bar = (step) => {
     const filled = '█'.repeat(step);
     const empty = '░'.repeat(BAR_STEPS - step);
     return `  ${sprite[7]}   ${c('cyan', filled)}${c('muted', empty)}${c('muted', '  starting claude…')}`;
   };
+
   const right = [
     '',
     wordmark[0],
     wordmark[1],
     wordmark[2],
-    `${c('muted', `v${version}`)}  ${c('yellow', what)}`,
+    versionText ? `${c('muted', versionText)}  ${c('yellow', displayWhat)}` : `${c('yellow', displayWhat)}`,
     c('muted', who),
     '',
   ];

@@ -15,6 +15,7 @@ test('shouldSplash is true only for a wide color TTY without opt-outs', () => {
   assert.equal(shouldSplash({ stdout: out(), env }), true);
   assert.equal(shouldSplash({ stdout: out({ isTTY: false }), env }), false);
   assert.equal(shouldSplash({ stdout: out(), env: { ...env, NO_COLOR: '1' } }), false);
+  assert.equal(shouldSplash({ stdout: out(), env: { ...env, NO_COLOR: '' } }), false);
   assert.equal(shouldSplash({ stdout: out(), env: { ...env, WRAPPER_CODE_NO_SPLASH: '1' } }), false);
   assert.equal(shouldSplash({ stdout: out(), env: { ...env, TERM: 'dumb' } }), false);
   assert.equal(shouldSplash({ stdout: out({ columns: 60 }), env }), false);
@@ -41,10 +42,36 @@ test('splashLines is 8 lines wide enough for the sprite plus text, with the bar 
 test('splashLines never hides the cursor and omits the selection separator when empty', () => {
   const { lines } = splashLines({ ...ARGS, selection: '', truecolor: false });
   const all = lines.join('\n');
+  const plain = (s) => s.replace(/\x1b\[[0-9;]*m/g, '');
   assert.doesNotMatch(all, /\x1b\[\?25l/);
   assert.doesNotMatch(all, /undefined/);
-  assert.match(all.replace(/\x1b\[[0-9;]*m/g, ''), /DeepSeek\s{2,}/);
-  assert.doesNotMatch(all, /DeepSeek · /);
+  // Find the version/what line and check it ends with provider name (no selection separator)
+  const versionLine = lines.find((l) => plain(l).includes('DeepSeek'));
+  assert.ok(versionLine, 'version line found');
+  assert.ok(plain(versionLine).endsWith('DeepSeek'), 'version line ends with provider, no separator');
+});
+
+test('splashLines with very long provider name and selection truncates with ellipsis', () => {
+  const longName = 'A'.repeat(40);
+  const longSel = 'B'.repeat(40);
+  const { lines } = splashLines({ version: '0.1.0', providerName: longName, selection: longSel, truecolor: true });
+  const plain = (s) => s.replace(/\x1b\[[0-9;]*m/g, '');
+  assert.equal(lines.length, 8);
+  for (const l of lines) assert.ok(plain(l).length <= SPLASH_WIDTH, `line too wide: ${plain(l).length}`);
+  // Version line should contain truncated what with ellipsis
+  const versionLine = lines.find((l) => plain(l).includes('v0.1.0'));
+  assert.ok(versionLine, 'version line found');
+  assert.ok(plain(versionLine).includes('…'), 'truncated what has ellipsis');
+});
+
+test('splashLines with undefined version and providerName has no undefined strings', () => {
+  const { lines } = splashLines({ version: undefined, providerName: undefined, selection: '', truecolor: false });
+  const all = lines.join('\n');
+  const plain = (s) => s.replace(/\x1b\[[0-9;]*m/g, '');
+  assert.doesNotMatch(all, /undefined/);
+  // Version line should be empty or just whitespace when no version/provider
+  const plainAll = plain(all);
+  assert.doesNotMatch(plainAll, /undefined/, 'no undefined in plain text');
 });
 
 test('showSplash prints the plain banner when the splash is not allowed', async () => {
