@@ -624,8 +624,8 @@ test('qwen: POST /save with a valid key writes the key and profile', async () =>
   api.close();
 });
 
-test('testCredential for qwen-token posts to the Token Plan endpoint', async () => {
-  const { default: qwenToken } = await import('../src/providers/qwen-token.js');
+test('testCredential for alibaba-token posts to the Token Plan endpoint', async () => {
+  const { default: qwenToken } = await import('../src/providers/alibaba-token.js');
   const seen = [];
   const fetchImpl = async (url, init) => { seen.push({ url, init }); return { ok: true, status: 200, statusText: 'OK', text: async () => '' }; };
   assert.deepEqual(await testCredential(qwenToken, 'sk-sp-x', { fetchImpl }), { ok: true });

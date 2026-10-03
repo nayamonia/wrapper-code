@@ -151,23 +151,30 @@ test('loadCatalog loads qwen with the Alibaba Coding Plan values', async () => {
   assert.equal(Object.isFrozen(qw.test.body), true, 'shared body object must not be mutable');
 });
 
-test('loadCatalog loads qwen-token with the Alibaba Token Plan values', async () => {
+const roles = (main, fast) => ({
+  ANTHROPIC_MODEL: main,
+  ANTHROPIC_DEFAULT_OPUS_MODEL: main,
+  ANTHROPIC_DEFAULT_SONNET_MODEL: main,
+  ANTHROPIC_DEFAULT_HAIKU_MODEL: fast,
+  CLAUDE_CODE_SUBAGENT_MODEL: fast,
+});
+
+test('loadCatalog loads alibaba-token with the Alibaba Token Plan values and four profiles', async () => {
   const catalog = await loadCatalog();
-  const qt = catalog.get('qwen-token');
-  assert.ok(qt, 'qwen-token provider present');
-  assert.equal(qt.name, 'Qwen (Alibaba Token Plan)');
+  assert.equal(catalog.has('qwen-token'), false, 'renamed to alibaba-token');
+  const qt = catalog.get('alibaba-token');
+  assert.ok(qt, 'alibaba-token provider present');
+  assert.equal(qt.name, 'Alibaba Token Plan');
   assert.equal(qt.credential.env, 'ANTHROPIC_AUTH_TOKEN');
   assert.match(qt.credential.label, /Token Plan/);
   assert.match(qt.credential.help, /sk-sp-/);
   assert.equal(qt.env.ANTHROPIC_BASE_URL, 'https://token-plan.ap-southeast-1.maas.aliyuncs.com/apps/anthropic');
-  assert.equal(qt.defaultProfile, 'token-plan');
-  assert.deepEqual(qt.profiles['token-plan'].env, {
-    ANTHROPIC_MODEL: 'qwen3.7-plus',
-    ANTHROPIC_DEFAULT_HAIKU_MODEL: 'qwen3.7-plus',
-    ANTHROPIC_DEFAULT_SONNET_MODEL: 'qwen3.7-plus',
-    ANTHROPIC_DEFAULT_OPUS_MODEL: 'qwen3.7-plus',
-    CLAUDE_CODE_SUBAGENT_MODEL: 'qwen3.7-plus',
-  });
+  assert.deepEqual(Object.keys(qt.profiles), ['qwen-max', 'qwen-plus', 'deepseek-pro', 'glm']);
+  assert.equal(qt.defaultProfile, 'qwen-max');
+  assert.deepEqual(qt.profiles['qwen-max'].env, roles('qwen3.8-max', 'qwen3.8-flash'));
+  assert.deepEqual(qt.profiles['qwen-plus'].env, roles('qwen3.7-plus', 'qwen3.7-plus'));
+  assert.deepEqual(qt.profiles['deepseek-pro'].env, roles('deepseek-v4-pro', 'deepseek-v4.1-flash'));
+  assert.deepEqual(qt.profiles.glm.env, roles('glm-5.3', 'glm-5.3'));
   assert.equal(qt.test.method, 'POST');
   assert.equal(qt.test.path, '/v1/messages');
   assert.equal(qt.test.auth, 'bearer');
@@ -176,10 +183,10 @@ test('loadCatalog loads qwen-token with the Alibaba Token Plan values', async ()
   assert.equal(qt.editableBaseUrl, false);
 });
 
-test('qwen help text tells sk-sp- Token Plan keys to use qwen-token', async () => {
+test('qwen help text tells sk-sp- Token Plan keys to use alibaba-token', async () => {
   const catalog = await loadCatalog();
   const help = catalog.get('qwen').credential.help;
   assert.match(help, /sk-sp-/);
-  assert.match(help, /qwen-token/);
+  assert.match(help, /alibaba-token/);
   assert.doesNotMatch(help, /pay-as-you-go sk- key does not work/);
 });
