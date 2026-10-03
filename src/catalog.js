@@ -46,6 +46,12 @@ export function validateProvider(provider) {
   if (!isObject(provider.test) || (typeof provider.test.url !== 'string' && typeof provider.test.path !== 'string')) {
     throw new Error(`${where}: test must be { method, url | path, auth }`);
   }
+  if (provider.test.headers !== undefined && !isObject(provider.test.headers)) {
+    throw new Error(`${where}: test.headers must be an object of header name to value`);
+  }
+  if (provider.test.body !== undefined && !isObject(provider.test.body)) {
+    throw new Error(`${where}: test.body must be a plain object (it is sent as JSON)`);
+  }
 }
 
 export async function loadCatalog(dirUrl = PROVIDERS_DIR) {
