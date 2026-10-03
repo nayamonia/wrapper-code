@@ -6,7 +6,7 @@ import {
 
 test('PALETTE is the Arcade neon set and is frozen', () => {
   assert.deepEqual(PALETTE, {
-    bg: '#0b0b14', ink: '#1b1b3a', magenta: '#ff2d95', cyan: '#2de2e6', yellow: '#ffd23f', white: '#f4f4f8', muted: '#3a3a66',
+    bg: '#0b0b14', ink: '#1b1b3a', magenta: '#ff2d95', cyan: '#2de2e6', yellow: '#ffd23f', white: '#f4f4f8', muted: '#3a3a66', dim: '#8a8aa3',
   });
   assert.ok(Object.isFrozen(PALETTE));
 });
@@ -110,4 +110,76 @@ test('faviconDataUri is an SVG data URI of the sprite', () => {
   const svg = decodeURIComponent(uri.slice('data:image/svg+xml;utf8,'.length));
   assert.match(svg, /viewBox="0 0 16 16"/);
   assert.ok((svg.match(/<rect /g) || []).length > 50);
+});
+
+// --- background leak and panel mode ---------------------------------------
+function scanCells(line) {
+  // Walks the ANSI stream and returns every drawn cell with the fg/bg active at that moment.
+  const cells = [];
+  let fg = null;
+  let bg = null;
+  const re = /\x1b\[([0-9;]*)m|([^\x1b])/g;
+  let m;
+  while ((m = re.exec(line))) {
+    if (m[1] !== undefined) {
+      const p = m[1].split(';').map(Number);
+      if (p[0] === 0) { fg = null; bg = null; }
+      else if (p[0] === 38) fg = p.slice(2).join(',');
+      else if (p[0] === 48) bg = p.slice(2).join(',');
+      else if (p[0] === 49) bg = null;
+    } else {
+      cells.push({ ch: m[2], fg, bg });
+    }
+  }
+  return cells;
+}
+
+test('renderHalfBlocks clears the background after a two-pixel cell', () => {
+  const [line] = renderHalfBlocks(['ww.', 'w..'], { truecolor: true });
+  const cells = scanCells(line);
+  assert.equal(cells[0].fg, '244,244,248');
+  assert.equal(cells[0].bg, '244,244,248'); // solid white cell is fine
+  assert.equal(cells[1].ch, '▀');
+  assert.equal(cells[1].bg, null, 'single-pixel cell must not inherit the previous background');
+  assert.equal(cells[2].ch, ' ');
+  assert.equal(cells[2].bg, null, 'empty cell must not inherit the previous background');
+});
+
+test('renderHalfBlocks never draws a pixel in the same color as its background (sprite and wordmark)', () => {
+  for (const rows of [SPRITE, wordmarkRows('WRAPPER-CODE')]) {
+    const padded = rows.length % 2 ? [...rows, '.'.repeat(rows[0].length)] : rows;
+    renderHalfBlocks(rows, { truecolor: true }).forEach((line, i) => {
+      scanCells(line).forEach((cell, x) => {
+        const top = padded[i * 2][x] ?? '.';
+        const bot = padded[i * 2 + 1][x] ?? '.';
+        if (cell.ch === ' ') assert.equal(cell.bg, null, `line ${i} col ${x}: empty cell has a background`);
+        else if (top === '.' || bot === '.') assert.equal(cell.bg, null, `line ${i} col ${x}: half cell has a background`);
+        else if (top !== bot) assert.notEqual(cell.fg, cell.bg, `line ${i} col ${x}: invisible pixel`);
+      });
+    });
+  }
+});
+
+test('renderHalfBlocks panel mode paints the night background on every cell', () => {
+  const night = '11,11,20';
+  const [line] = renderHalfBlocks(['w.c', 'w.'], { truecolor: true, panel: true });
+  const cells = scanCells(line);
+  assert.equal(cells.length, 3);
+  assert.equal(cells[0].bg, '244,244,248'); // solid cell keeps its own bottom color
+  assert.equal(cells[1].ch, ' ');
+  assert.equal(cells[1].bg, night);
+  assert.equal(cells[2].ch, '▀');
+  assert.equal(cells[2].fg, '45,226,230');
+  assert.equal(cells[2].bg, night);
+  assert.ok(line.endsWith('\x1b[0m'));
+  const [plain] = renderHalfBlocks(['..', '..'], { truecolor: true, panel: true });
+  assert.equal(scanCells(plain).every((c) => c.bg === night), true);
+});
+
+test('ansi exposes the night background and a readable dim text color in both modes', () => {
+  assert.equal(ansi('bg', { truecolor: true, bg: true }), '\x1b[48;2;11;11;20m');
+  assert.equal(ansi('bg', { truecolor: false, bg: true }), '\x1b[40m');
+  assert.equal(PALETTE.dim, '#8a8aa3');
+  assert.equal(ansi('dim', { truecolor: true }), '\x1b[38;2;138;138;163m');
+  assert.equal(ansi('dim', { truecolor: false }), '\x1b[37m');
 });

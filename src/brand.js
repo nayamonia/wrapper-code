@@ -6,6 +6,7 @@ export const PALETTE = Object.freeze({
   yellow: '#ffd23f',
   white: '#f4f4f8',
   muted: '#3a3a66',
+  dim: '#8a8aa3',
 });
 
 // Pixel codes used in maps: . none, d ink, p magenta, c cyan, y yellow, w white, x white (wordmark)
@@ -77,7 +78,7 @@ export function renderSvg(rows, { px, className } = {}) {
   return `<svg ${attrs.join(' ')}>${rects.join('')}</svg>`;
 }
 
-const BASIC_FG = { ink: 34, magenta: 95, cyan: 96, yellow: 93, white: 97, muted: 90 };
+const BASIC_FG = { bg: 30, ink: 34, magenta: 95, cyan: 96, yellow: 93, white: 97, muted: 90, dim: 37 };
 
 function hexToRgb(hex) {
   const n = parseInt(hex.slice(1), 16);
@@ -85,7 +86,7 @@ function hexToRgb(hex) {
 }
 
 export function ansi(name, { truecolor, bg = false }) {
-  if (!Object.hasOwn(PALETTE, name) || name === 'bg') throw new Error(`Unknown color "${name}"`);
+  if (!Object.hasOwn(PALETTE, name)) throw new Error(`Unknown color "${name}"`);
   if (truecolor) {
     const [r, g, b] = hexToRgb(PALETTE[name]);
     return `\x1b[${bg ? 48 : 38};2;${r};${g};${b}m`;
@@ -94,30 +95,43 @@ export function ansi(name, { truecolor, bg = false }) {
 }
 
 export const RESET = '\x1b[0m';
+const BG_DEFAULT = '\x1b[49m';
 
-export function renderHalfBlocks(rows, { truecolor = true } = {}) {
+// panel: true paints the brand night color behind every cell, so the drawing
+// looks the same on light and dark terminals instead of depending on their background.
+export function renderHalfBlocks(rows, { truecolor = true, panel = false } = {}) {
   const padded = rows.length % 2 ? [...rows, '.'.repeat(rows[0].length)] : [...rows];
   const w = Math.max(...padded.map((r) => r.length));
+  const base = panel ? ansi('bg', { truecolor, bg: true }) : BG_DEFAULT;
   const lines = [];
   for (let y = 0; y < padded.length; y += 2) {
     const top = padded[y].padEnd(w, '.');
     const bot = padded[y + 1].padEnd(w, '.');
-    let line = '';
-    let colored = false;
+    let line = panel ? base : '';
+    let colored = panel;
+    // A two-pixel cell sets its own background; the next cell of any other kind
+    // must restore the base background, otherwise the previous bottom color
+    // leaks under it and a pixel drawn in that same color becomes invisible.
+    let bgSet = false;
     for (let x = 0; x < w; x += 1) {
       const t = top[x];
       const b = bot[x];
+      const restore = bgSet ? base : '';
       if (t === '.' && b === '.') {
-        line += ' ';
+        line += `${restore} `;
+        bgSet = false;
       } else if (t !== '.' && b !== '.') {
         line += `${ansi(colorOf(t), { truecolor })}${ansi(colorOf(b), { truecolor, bg: true })}▀`;
         colored = true;
+        bgSet = true;
       } else if (t !== '.') {
-        line += `${ansi(colorOf(t), { truecolor })}▀`;
+        line += `${restore}${ansi(colorOf(t), { truecolor })}▀`;
         colored = true;
+        bgSet = false;
       } else {
-        line += `${ansi(colorOf(b), { truecolor })}▄`;
+        line += `${restore}${ansi(colorOf(b), { truecolor })}▄`;
         colored = true;
+        bgSet = false;
       }
     }
     lines.push(colored ? `${line}${RESET}` : line);

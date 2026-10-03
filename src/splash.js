@@ -2,6 +2,7 @@ import { SPRITE, wordmarkRows, renderHalfBlocks, supportsTruecolor, ansi, RESET 
 import { CREDITS, launchBanner } from './credits.js';
 
 export const SPLASH_WIDTH = 72;
+export const PANEL_WIDTH = 71; // one short of the minimum width so the cursor never wraps
 export const BAR_STEPS = 12;
 export const STEP_MS = 50;
 
@@ -21,9 +22,18 @@ function stripAnsi(s) {
 }
 
 export function splashLines({ version, providerName, selection, truecolor }) {
-  const c = (name, text) => `${ansi(name, { truecolor })}${text}${RESET}`;
-  const sprite = renderHalfBlocks(SPRITE, { truecolor });          // 8 lines
-  const wordmark = renderHalfBlocks(wordmarkRows('WRAPPER-CODE'), { truecolor }); // 3 lines
+  const night = ansi('bg', { truecolor, bg: true });
+  // Every line sits on the brand's night panel, so the splash looks the same on
+  // light and dark terminals. Colored runs end with RESET, which also drops the
+  // background, so the panel color is re-applied right after each reset.
+  const c = (name, text) => `${ansi(name, { truecolor })}${text}${RESET}${night}`;
+  const onPanel = (line) => {
+    const body = line.split(RESET).join(`${RESET}${night}`);
+    const pad = Math.max(0, PANEL_WIDTH - stripAnsi(body).length);
+    return `${night}${body}${' '.repeat(pad)}${RESET}`;
+  };
+  const sprite = renderHalfBlocks(SPRITE, { truecolor, panel: true });          // 8 lines
+  const wordmark = renderHalfBlocks(wordmarkRows('WRAPPER-CODE'), { truecolor, panel: true }); // 3 lines
   const who = `${CREDITS.license} · ${CREDITS.name} · ${host(CREDITS.site)}`;
 
   // Build provider · selection string, handling undefined/empty values
@@ -51,7 +61,7 @@ export function splashLines({ version, providerName, selection, truecolor }) {
   const bar = (step) => {
     const filled = '█'.repeat(step);
     const empty = '░'.repeat(BAR_STEPS - step);
-    return `  ${sprite[7]}   ${c('cyan', filled)}${c('muted', empty)}${c('muted', '  starting claude…')}`;
+    return onPanel(`  ${sprite[7]}   ${c('cyan', filled)}${c('muted', empty)}${c('dim', '  starting claude…')}`);
   };
 
   const right = [
@@ -59,11 +69,11 @@ export function splashLines({ version, providerName, selection, truecolor }) {
     wordmark[0],
     wordmark[1],
     wordmark[2],
-    versionText ? `${c('muted', versionText)}  ${c('yellow', displayWhat)}` : `${c('yellow', displayWhat)}`,
-    c('muted', who),
+    versionText ? `${c('dim', versionText)}  ${c('yellow', displayWhat)}` : `${c('yellow', displayWhat)}`,
+    c('dim', who),
     '',
   ];
-  const lines = right.map((r, i) => (r ? `  ${sprite[i]}   ${r}` : `  ${sprite[i]}`));
+  const lines = right.map((r, i) => onPanel(r ? `  ${sprite[i]}   ${r}` : `  ${sprite[i]}`));
   lines.push(bar(0));
   return { lines, bar };
 }

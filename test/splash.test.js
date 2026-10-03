@@ -48,7 +48,7 @@ test('splashLines never hides the cursor and omits the selection separator when 
   // Find the version/what line and check it ends with provider name (no selection separator)
   const versionLine = lines.find((l) => plain(l).includes('DeepSeek'));
   assert.ok(versionLine, 'version line found');
-  assert.ok(plain(versionLine).endsWith('DeepSeek'), 'version line ends with provider, no separator');
+  assert.ok(plain(versionLine).trimEnd().endsWith('DeepSeek'), 'version line ends with provider, no separator (panel padding aside)');
 });
 
 test('splashLines with very long provider name and selection truncates with ellipsis', () => {
@@ -93,4 +93,30 @@ test('showSplash writes the screen, animates the bar in place and ends with a bl
   assert.ok(text.endsWith('\n\n'));
   assert.doesNotMatch(text, /\x1b\[\?25l/);
   assert.ok(text.includes('█'.repeat(BAR_STEPS)));
+});
+
+// --- panel: identical on light and dark terminals --------------------------
+import { PANEL_WIDTH } from '../src/splash.js';
+
+test('splashLines paints a night panel of constant width behind every line', () => {
+  const NIGHT = '\x1b[48;2;11;11;20m';
+  const { lines, bar } = splashLines({ ...ARGS, truecolor: true });
+  const plain = (s) => s.replace(/\x1b\[[0-9;]*m/g, '');
+  for (const l of [...lines, bar(BAR_STEPS)]) {
+    assert.ok(l.startsWith(NIGHT), 'line starts with the panel background');
+    assert.ok(l.endsWith('\x1b[0m'), 'line ends with reset');
+    assert.equal(plain(l).length, PANEL_WIDTH, 'panel width is constant');
+    const inner = l.slice(NIGHT.length, -'\x1b[0m'.length);
+    for (const piece of inner.split('\x1b[0m').slice(1)) {
+      assert.ok(piece.startsWith(NIGHT), 'background re-applied after every inner reset');
+    }
+  }
+  assert.ok(PANEL_WIDTH < SPLASH_WIDTH, 'panel fits without wrapping on the minimum width');
+});
+
+test('splashLines uses the readable dim color for secondary text, not the bar-empty muted', () => {
+  const { lines } = splashLines({ ...ARGS, truecolor: true });
+  const DIM = '\x1b[38;2;138;138;163m';
+  assert.ok(lines[4].includes(`${DIM}v0.1.0`), 'version line uses dim');
+  assert.ok(lines[5].includes(`${DIM}MIT`), 'credits line uses dim');
 });
