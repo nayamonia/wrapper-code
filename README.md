@@ -1,6 +1,6 @@
 # wrapper-code
 
-<p align="center"><sub>The 8-bit splash you see for a moment before Claude Code starts.</sub></p>
+<p><sub>The 8-bit splash you see for a moment before Claude Code starts.</sub></p>
 
 Run the [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI harness with other LLM providers, without touching your Claude Code configuration.
 
