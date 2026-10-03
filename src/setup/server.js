@@ -92,6 +92,7 @@ async function pagePayload(provider, current, token, { fetchImpl, discoveryTimeo
       envKeys: provider.models.envKeys,
       requireCapability: provider.models.requireCapability,
       note: provider.models.note || '',
+      emptyHint: provider.models.emptyHint || '',
     };
     payload.current.model = current.WRAPPER_CODE_MODEL || '';
     payload.discovery = await discoverModels(provider, baseUrl, { fetchImpl, timeoutMs: discoveryTimeoutMs });

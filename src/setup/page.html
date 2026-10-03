@@ -16,7 +16,7 @@
   .sub { color: var(--muted); margin: 0 0 20px; font-size: 13px; }
   label { display: block; font-weight: 600; margin: 16px 0 6px; }
   .help { color: var(--muted); font-size: 13px; margin: 4px 0 0; }
-  input[type=text], input[type=password] { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 0; background: transparent; color: var(--fg); font-size: 15px; }
+  input[type=text], input[type=password], input[type=search] { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 0; background: transparent; color: var(--fg); font-size: 15px; }
   .row { display: flex; gap: 8px; align-items: center; }
   .row input { flex: 1; }
   button { padding: 10px 16px; border-radius: 0; border: 1px solid var(--line); background: transparent; color: var(--fg); cursor: pointer; font-size: 14px; }
@@ -40,6 +40,9 @@
   .profile.off { opacity: .55; cursor: not-allowed; }
   .status { color: var(--muted); font-size: 13px; }
   .status.err { color: var(--err); }
+  .models { max-height: 420px; overflow: auto; }
+  .models .profile[hidden] { display: none; }
+  #models-filter { margin-bottom: 8px; }
   :focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
   .brand { display: flex; align-items: center; gap: 16px; margin-bottom: 4px; }
   .brand-sprite svg { width: 64px; height: 64px; display: block; }
@@ -82,7 +85,8 @@
           <span class="status" id="models-status"></span>
           <button type="button" id="refresh">Refresh list</button>
         </div>
-        <div id="models"></div>
+        <input id="models-filter" type="search" autocomplete="off" spellcheck="false" placeholder="Filter models, e.g. openai/ or gemma" hidden>
+        <div id="models" class="models"></div>
         <label for="otherModel">Other model</label>
         <input id="otherModel" type="text" autocomplete="off" spellcheck="false" placeholder="e.g. gemma4:cloud">
         <p class="help" id="models-note"></p>
@@ -181,7 +185,10 @@
     }
     list.textContent = '';
     var found = discovery.models.length;
-    status.textContent = found ? found + ' model' + (found === 1 ? '' : 's') + ' installed' : 'No models installed. Run: ollama pull qwen3-coder';
+    status.textContent = found ? found + ' model' + (found === 1 ? '' : 's') + ' available' : (provider.models.emptyHint || 'No models found.');
+    var filter = $('models-filter');
+    filter.hidden = found <= 20;
+    if (filter.hidden) filter.value = '';
     discovery.models.forEach(function (m) {
       var label = document.createElement('label');
       label.className = 'profile' + (m.tools === false ? ' off' : '');
@@ -193,9 +200,14 @@
       radio.addEventListener('change', function () { $('otherModel').value = ''; renderAdvanced(); });
       var text = document.createElement('div');
       var strong = document.createElement('div'); strong.textContent = m.name;
+      label.setAttribute('data-search', (m.name + ' ' + (m.label || '')).toLowerCase());
       var meta = [];
+      if (m.label && m.label !== m.name) meta.push(m.label);
       if (m.parameterSize) meta.push(m.parameterSize);
       if (m.contextLength) meta.push(Math.round(m.contextLength / 1024) + 'k context');
+      if (m.priceIn !== null && m.priceIn !== undefined) {
+        meta.push(m.priceIn === 0 && m.priceOut === 0 ? 'free' : '$' + m.priceIn + ' in / $' + m.priceOut + ' out per M tokens');
+      }
       if (m.tools === false) meta.push('no tool support, cannot run Claude Code');
       if (m.tools === null) meta.push('tool support unknown');
       var code = document.createElement('code'); code.textContent = meta.join(' · ');
@@ -218,8 +230,18 @@
       }
     }
     rendered = true;
+    applyFilter();
     renderAdvanced();
   }
+
+  function applyFilter() {
+    var q = $('models-filter').value.trim().toLowerCase();
+    var rows = document.querySelectorAll('#models .profile');
+    for (var i = 0; i < rows.length; i++) {
+      rows[i].hidden = Boolean(q) && rows[i].getAttribute('data-search').indexOf(q) === -1;
+    }
+  }
+  $('models-filter').addEventListener('input', applyFilter);
 
   function selectedModel() {
     var typed = $('otherModel').value.trim();

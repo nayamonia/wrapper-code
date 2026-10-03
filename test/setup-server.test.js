@@ -365,6 +365,7 @@ test('ollama: GET / carries discovery results, models metadata and no profiles',
   assert.equal('profiles' in payload.provider, false);
   assert.deepEqual(payload.provider.models.envKeys, ollama.models.envKeys);
   assert.equal(payload.provider.models.requireCapability, 'tools');
+  assert.match(payload.provider.models.emptyHint, /ollama pull/);
   assert.equal(payload.discovery.ok, true);
   assert.deepEqual(payload.discovery.models.map((m) => m.name), ['gemma3:4b', 'qwen3-code:14b']);
   assert.equal(payload.discovery.models[1].tools, true);
