@@ -197,5 +197,42 @@ test('help texts no longer mention the Coding Plan or the old ids', async () => 
   assert.doesNotMatch(alibaba, /Coding Plan|wrapper-code qwen\b|alibaba-token/);
   const qwencloud = catalog.get('qwencloud').credential.help;
   assert.doesNotMatch(qwencloud, /Coding Plan|alibaba-token/);
-  assert.deepEqual([...catalog.keys()].sort(), ['alibaba', 'deepseek', 'ollama', 'qwencloud']);
+  assert.deepEqual([...catalog.keys()].sort(), ['alibaba', 'deepseek', 'ollama', 'openrouter', 'qwencloud']);
+});
+
+test('validateProvider accepts models.format ollama/openrouter and models.emptyHint, rejects other formats', () => {
+  const base = validModels();
+  assert.doesNotThrow(() => validateProvider({ ...base, models: { ...base.models, format: 'ollama' } }));
+  assert.doesNotThrow(() => validateProvider({ ...base, models: { ...base.models, format: 'openrouter', emptyHint: 'none' } }));
+  assert.throws(() => validateProvider({ ...base, models: { ...base.models, format: 'openai' } }), /models\.format/);
+  assert.throws(() => validateProvider({ ...base, models: { ...base.models, emptyHint: 7 } }), /models\.emptyHint/);
+});
+
+test('loadCatalog loads openrouter: key, gateway discovery flag, openrouter-format model discovery, free key test', async () => {
+  const catalog = await loadCatalog();
+  const or = catalog.get('openrouter');
+  assert.ok(or, 'openrouter provider present');
+  assert.equal(or.name, 'OpenRouter');
+  assert.equal(or.docs, 'https://openrouter.ai/docs/guides/guides/claude-code-integration');
+  assert.equal(or.credential.env, 'ANTHROPIC_AUTH_TOKEN');
+  assert.equal(or.credential.label, 'OpenRouter API key');
+  assert.match(or.credential.help, /openrouter\.ai\/keys/);
+  assert.deepEqual(or.env, { ANTHROPIC_BASE_URL: 'https://openrouter.ai/api', CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY: '1' });
+  assert.equal(or.models.format, 'openrouter');
+  assert.equal(or.models.discoverPath, '/v1/models');
+  assert.equal(or.models.requireCapability, 'tools');
+  assert.deepEqual(or.models.envKeys, [
+    'ANTHROPIC_MODEL', 'ANTHROPIC_DEFAULT_OPUS_MODEL', 'ANTHROPIC_DEFAULT_SONNET_MODEL',
+    'ANTHROPIC_DEFAULT_HAIKU_MODEL', 'ANTHROPIC_DEFAULT_FABLE_MODEL', 'CLAUDE_CODE_SUBAGENT_MODEL',
+  ]);
+  assert.match(or.models.note, /Anthropic models/);
+  assert.equal(typeof or.models.emptyHint, 'string');
+  assert.deepEqual(or.test, { method: 'GET', url: 'https://openrouter.ai/api/v1/key', auth: 'bearer' });
+  assert.equal(or.editableBaseUrl, false);
+  assert.equal('profiles' in or, false);
+});
+
+test('ollama carries its empty-list hint in the catalog', async () => {
+  const catalog = await loadCatalog();
+  assert.match(catalog.get('ollama').models.emptyHint, /ollama pull/);
 });

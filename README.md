@@ -24,6 +24,7 @@ wrapper-code ollama                # launch Claude Code with a local Ollama mode
 wrapper-code ollama --model gemma3 # use another main model for this session only
 wrapper-code qwencloud             # launch Claude Code with Qwen Cloud (pay-as-you-go)
 wrapper-code alibaba               # launch Claude Code with the Alibaba Token Plan (Qwen, DeepSeek, GLM)
+wrapper-code openrouter            # launch Claude Code with any OpenRouter model (OpenAI, Google, Meta, Mistral, xAI...)
 wrapper-code deepseek --resume     # anything after the provider is passed to claude
 wrapper-code setup deepseek        # change the API key or model profile
 wrapper-code list                  # providers and whether they are configured
@@ -39,6 +40,7 @@ The first time you launch a provider, a setup page opens in your browser on `127
 | `ollama` | No key. The setup page lists the models installed in your local Ollama (default `http://localhost:11434`, editable for a remote server) and saves one as the default. Models without tool support are shown but cannot be selected. Runs Qwen Coder, Gemma, Llama, Mistral and any other Ollama model, offline. | [Ollama × Claude Code](https://docs.ollama.com/integrations/claude-code) |
 | `qwencloud` | Qwen Cloud API key (pay-as-you-go, starts with `sk-`, created at home.qwencloud.com/api-keys; new accounts get a free quota). One profile, `pay-as-you-go`: automatic routing (`auto`) with Qwen 3.8 Max for Opus, Qwen 3.8 Flash for Sonnet and Qwen 3.6 Flash for Haiku, 983k context. | [Qwen Cloud × Claude Code](https://docs.qwencloud.com/developer-guides/clients-and-developer-tools/claude-code) |
 | `alibaba` | Token Plan API key from Alibaba Cloud Model Studio (Personal or Team Edition, starts with `sk-sp-`). Profiles: `qwen-max` (default): Qwen 3.8 Max, Qwen 3.8 Flash for subagents. `qwen-plus`: Qwen 3.7 Plus for every role. `deepseek-pro`: DeepSeek V4 Pro, DeepSeek V4.1 Flash for subagents. `glm`: GLM 5.3 for every role. | [Model Studio × Claude Code](https://www.alibabacloud.com/help/en/model-studio/claude-code) |
+| `openrouter` | OpenRouter API key (openrouter.ai/keys), checked for free. The setup page lists every model OpenRouter serves, with a search box; models without tool calling are shown but cannot be selected. The chosen model is used for every role, subagents included. Billing through your OpenRouter credits. | [OpenRouter × Claude Code](https://openrouter.ai/docs/guides/guides/claude-code-integration) |
 
 Claude Code's system prompt and tools can exceed 32k tokens, and Ollama serves requests at its own runtime context (`OLLAMA_CONTEXT_LENGTH`, often 32k or less by default), not at the model's maximum. A request that does not fit is silently truncated and the model seems to ignore the prompt. Set Ollama's served context to at least 64k on the Ollama side, for example `OLLAMA_CONTEXT_LENGTH=65536 ollama serve`, or the context-length setting in the Ollama app.
 
@@ -50,7 +52,9 @@ The Qwen Cloud and Alibaba setups (`qwencloud` and `alibaba`) validate the key w
 
 The Alibaba Coding Plan was retired, so the former `qwen` provider is gone and `alibaba-token` is now `alibaba`. An old `qwen.env` or `alibaba-token.env` in the config directory is simply ignored.
 
-More online providers (Kimi, GLM, MiniMax) are planned. A provider is a single data file in `src/providers/`; pull requests welcome.
+With OpenRouter you can pick OpenAI, Google, Meta, Mistral, xAI and other models through one key. To use a cheaper model for subagents and background work, edit `ANTHROPIC_DEFAULT_HAIKU_MODEL` and `CLAUDE_CODE_SUBAGENT_MODEL` in `~/.config/wrapper-code/openrouter.env`; the wrapper keeps hand-written keys. OpenRouter itself warns that Claude Code is tuned for Anthropic models, so other models may behave worse in long agentic sessions.
+
+Kimi, GLM and MiniMax are reachable through OpenRouter today; dedicated providers for them are planned. A provider is a single data file in `src/providers/`; pull requests welcome.
 
 ## Where things are stored
 

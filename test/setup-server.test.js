@@ -6,6 +6,7 @@ import { startSetupServer, testCredential } from '../src/setup/server.js';
 import deepseek from '../src/providers/deepseek.js';
 import ollama from '../src/providers/ollama.js';
 import qwencloud from '../src/providers/qwencloud.js';
+import openrouter from '../src/providers/openrouter.js';
 
 // Servers opened by a test are closed after it even when an assertion fails first;
 // otherwise a failing test leaves sockets open and the file hangs instead of failing.
@@ -364,6 +365,7 @@ test('ollama: GET / carries discovery results, models metadata and no profiles',
   assert.equal('profiles' in payload.provider, false);
   assert.deepEqual(payload.provider.models.envKeys, ollama.models.envKeys);
   assert.equal(payload.provider.models.requireCapability, 'tools');
+  assert.match(payload.provider.models.emptyHint, /ollama pull/);
   assert.equal(payload.discovery.ok, true);
   assert.deepEqual(payload.discovery.models.map((m) => m.name), ['gemma3:4b', 'qwen3-code:14b']);
   assert.equal(payload.discovery.models[1].tools, true);
@@ -662,4 +664,116 @@ test('setup page reads the API error message from nested and top-level JSON bodi
   assert.equal(apiErrorMessage('Unauthorized'), 'Unauthorized');
   assert.equal(apiErrorMessage('{"code":"X"}'), '{"code":"X"}');
   assert.equal(apiErrorMessage(''), 'Request failed');
+});
+
+const OR_MODELS = {
+  data: [
+    { id: 'openai/gpt-6.1-sol', name: 'OpenAI: GPT-6.1 Sol', context_length: 1050000, pricing: { prompt: '0.000002', completion: '0.00001' }, supported_parameters: ['tools'] },
+    { id: 'google/gemma-4-it', name: 'Google: Gemma 4', context_length: 131072, pricing: { prompt: '0', completion: '0' }, supported_parameters: ['temperature'] },
+  ],
+};
+
+async function fakeOpenRouter({ validKey = 'sk-or-good' } = {}) {
+  const seen = [];
+  const server = http.createServer((req, res) => {
+    seen.push({ url: req.url, auth: req.headers.authorization || null });
+    if (req.method === 'GET' && req.url === '/v1/models') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(OR_MODELS));
+      return;
+    }
+    if (req.method === 'GET' && req.url === '/v1/key') {
+      if (req.headers.authorization === `Bearer ${validKey}`) {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end('{"data":{"label":"test","usage":0}}');
+      } else {
+        res.writeHead(401, { 'content-type': 'application/json' });
+        res.end('{"error":{"message":"User not found.","code":401}}');
+      }
+      return;
+    }
+    res.writeHead(404);
+    res.end();
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  return { url: `http://127.0.0.1:${server.address().port}`, seen, close: () => { server.closeAllConnections(); server.close(); } };
+}
+
+async function bootOpenRouter({ current } = {}) {
+  const api = await fakeOpenRouter();
+  onCleanup(() => api.close());
+  const written = [];
+  const server = await startSetupServer({
+    provider: openrouter,
+    current: { ANTHROPIC_BASE_URL: api.url, ...(current || {}) },
+    testUrl: `${api.url}/v1/key`,
+    writeEnv: async (values) => { written.push(values); },
+  });
+  const post = (route, body) => fetch(`http://127.0.0.1:${server.port}${route}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-setup-token': server.token },
+    body: JSON.stringify(body),
+  });
+  const stop = onCleanup(async () => { server.close(); await server.done; api.close(); });
+  return { server, api, written, post, stop };
+}
+
+test('openrouter: GET / shows the key field, discovers models without auth and carries label and price', async () => {
+  const { server, api, stop } = await bootOpenRouter();
+  const html = await (await fetch(server.url)).text();
+  const payload = JSON.parse(html.match(/var setup = (\{.*?\});\n/s)[1].replace(/<\\\//g, '</'));
+  assert.equal(payload.provider.id, 'openrouter');
+  assert.equal(payload.provider.credential.label, 'OpenRouter API key');
+  assert.equal(payload.discovery.ok, true);
+  assert.deepEqual(payload.discovery.models.map((m) => m.name), ['google/gemma-4-it', 'openai/gpt-6.1-sol']);
+  assert.equal(payload.discovery.models[1].label, 'OpenAI: GPT-6.1 Sol');
+  assert.equal(payload.discovery.models[1].priceIn, 2);
+  assert.equal(payload.discovery.models[1].priceOut, 10);
+  assert.equal(payload.discovery.models[0].tools, false);
+  assert.equal(api.seen.find((s) => s.url === '/v1/models').auth, null, 'discovery sends no key');
+  await stop();
+});
+
+test('openrouter: POST /save with a valid key and a model writes key, model and context snapshot', async () => {
+  const { server, api, post, written } = await bootOpenRouter();
+  const res = await post('/save', { credential: ' sk-or-good ', model: 'openai/gpt-6.1-sol', contextLength: 1050000 });
+  assert.equal(res.status, 200, await res.text());
+  assert.deepEqual(written, [{
+    ANTHROPIC_BASE_URL: api.url,
+    ANTHROPIC_AUTH_TOKEN: 'sk-or-good',
+    WRAPPER_CODE_MODEL: 'openai/gpt-6.1-sol',
+    CLAUDE_CODE_AUTO_COMPACT_WINDOW: '1050000',
+  }]);
+  assert.equal(api.seen.find((s) => s.url === '/v1/key').auth, 'Bearer sk-or-good');
+  assert.equal((await server.done).saved, true);
+  api.close();
+});
+
+test('openrouter: POST /save with a rejected key shows the 401 message and writes nothing', async () => {
+  const { post, written, stop } = await bootOpenRouter();
+  const res = await post('/save', { credential: 'sk-or-bad', model: 'openai/gpt-6.1-sol', contextLength: 1050000 });
+  assert.equal(res.status, 400);
+  const body = await res.json();
+  assert.equal(body.status, 401);
+  assert.match(body.message, /User not found/);
+  assert.equal(written.length, 0);
+  await stop();
+});
+
+test('openrouter: POST /save with a valid key but no model is 400 and writes nothing', async () => {
+  const { post, written, stop } = await bootOpenRouter();
+  const res = await post('/save', { credential: 'sk-or-good', model: '' });
+  assert.equal(res.status, 400);
+  assert.match((await res.json()).message, /Model is required/);
+  assert.equal(written.length, 0);
+  await stop();
+});
+
+test('openrouter: re-running setup keeps a hand-written subagent model override', async () => {
+  const { post, written, stop } = await bootOpenRouter({ current: { ANTHROPIC_AUTH_TOKEN: 'sk-or-good', WRAPPER_CODE_MODEL: 'openai/gpt-6.1-sol', ANTHROPIC_DEFAULT_HAIKU_MODEL: 'google/gemma-4-it', CLAUDE_CODE_SUBAGENT_MODEL: 'google/gemma-4-it' } });
+  const res = await post('/save', { credential: '', model: 'openai/gpt-6.1-sol', contextLength: 1050000 });
+  assert.equal(res.status, 200, await res.text());
+  assert.equal(written[0].ANTHROPIC_DEFAULT_HAIKU_MODEL, 'google/gemma-4-it');
+  assert.equal(written[0].CLAUDE_CODE_SUBAGENT_MODEL, 'google/gemma-4-it');
+  await stop();
 });
