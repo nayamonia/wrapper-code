@@ -20,7 +20,9 @@ function providerRow(p) {
   const setup = p.credential ? esc(p.credential.label) : 'No key';
   const choices = p.profiles
     ? Object.entries(p.profiles).map(([id, prof]) => `<li><code>${esc(id)}</code> ${esc(prof.label)}</li>`).join('')
-    : '<li>Models discovered from your server at setup time</li>';
+    : p.credential
+      ? '<li>Any model with tool calling, picked from the live catalog at setup time</li>'
+      : '<li>Models discovered from your server at setup time</li>';
   return `<tr>
   <td><code>wrapper-code ${esc(p.id)}</code></td>
   <td><strong>${esc(p.name)}</strong><div class="muted">${setup}</div></td>
