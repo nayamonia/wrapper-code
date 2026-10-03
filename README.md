@@ -2,6 +2,8 @@
 
 Run the [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI harness with other LLM providers, without touching your Claude Code configuration.
 
+Website: [nayamonia.github.io/wrapper-code](https://nayamonia.github.io/wrapper-code/) · Package: [npmjs.com/package/wrapper-code](https://www.npmjs.com/package/wrapper-code)
+
 `wrapper-code deepseek` opens a normal interactive Claude Code session that talks to DeepSeek. Running `claude` directly still uses Anthropic, exactly as before. Nothing is written under `~/.claude`, and no variable leaks into your shell: the provider settings exist only inside that one session.
 
 ## Install
