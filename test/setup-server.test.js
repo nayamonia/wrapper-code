@@ -4,6 +4,7 @@ import http from 'node:http';
 import { startSetupServer, testCredential } from '../src/setup/server.js';
 import deepseek from '../src/providers/deepseek.js';
 import ollama from '../src/providers/ollama.js';
+import qwen from '../src/providers/qwen.js';
 
 async function fakeApi(status) {
   const server = http.createServer((req, res) => {
@@ -529,4 +530,96 @@ test('brand injection uses a function replacer so $ sequences survive', async ()
   const { injectBrand } = await import('../src/setup/server.js');
   const out = injectBrand('A __BRAND_SPRITE__ B', { sprite: 'x$&y', wordmark: '', favicon: '' });
   assert.equal(out, 'A x$&y B');
+});
+
+test('testCredential sends the catalog headers and a JSON body for qwen, with bearer auth', async () => {
+  const seen = [];
+  const fetchImpl = async (url, init) => { seen.push({ url, init }); return { ok: true, status: 200, statusText: 'OK', text: async () => '' }; };
+  const result = await testCredential(qwen, 'cp-key', { fetchImpl });
+  assert.deepEqual(result, { ok: true });
+  assert.equal(seen[0].url, 'https://coding-intl.dashscope.aliyuncs.com/apps/anthropic/v1/messages');
+  assert.equal(seen[0].init.method, 'POST');
+  assert.equal(seen[0].init.headers.Authorization, 'Bearer cp-key');
+  assert.equal(seen[0].init.headers['anthropic-version'], '2023-06-01');
+  assert.equal(seen[0].init.headers['content-type'], 'application/json');
+  assert.deepEqual(JSON.parse(seen[0].init.body), { model: 'qwen3.7-plus', max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] });
+});
+
+test('testCredential sends no body and no content-type for providers without test.body', async () => {
+  const seen = [];
+  const fetchImpl = async (url, init) => { seen.push({ url, init }); return { ok: true, status: 200, statusText: 'OK', text: async () => '' }; };
+  await testCredential(deepseek, 'sk-1', { fetchImpl });
+  assert.equal('body' in seen[0].init, false);
+  assert.equal('content-type' in seen[0].init.headers, false);
+  assert.equal(seen[0].init.method, 'GET');
+});
+
+test('testCredential serializes a body containing $ and quotes verbatim', async () => {
+  const seen = [];
+  const fetchImpl = async (url, init) => { seen.push({ url, init }); return { ok: true, status: 200, statusText: 'OK', text: async () => '' }; };
+  const weird = { ...qwen, test: { ...qwen.test, body: { messages: [{ role: 'user', content: 'say "$&" and $1' }] } } };
+  await testCredential(weird, 'k', { fetchImpl });
+  assert.equal(JSON.parse(seen[0].init.body).messages[0].content, 'say "$&" and $1');
+});
+
+test('testCredential treats any 2xx as valid even when the body is not JSON', async () => {
+  const fetchImpl = async () => ({ ok: true, status: 200, statusText: 'OK', text: async () => { throw new Error('no body'); } });
+  assert.deepEqual(await testCredential(qwen, 'k', { fetchImpl }), { ok: true });
+});
+
+test('qwen: POST /save with a key for another plan shows the Alibaba 401 message and writes nothing', async () => {
+  const api = http.createServer((req, res) => {
+    if (req.method === 'POST' && req.url === '/v1/messages') {
+      res.writeHead(401, { 'content-type': 'application/json' });
+      res.end('{"error":{"code":"invalid_api_key","message":"invalid access token or token expired","type":"invalid_request_error"}}');
+      return;
+    }
+    res.writeHead(404);
+    res.end();
+  });
+  await new Promise((r) => api.listen(0, '127.0.0.1', r));
+  const written = [];
+  const server = await startSetupServer({ provider: qwen, current: {}, testUrl: `http://127.0.0.1:${api.address().port}/v1/messages`, writeEnv: async (v) => { written.push(v); } });
+  const res = await fetch(`http://127.0.0.1:${server.port}/save`, {
+    method: 'POST', headers: { 'content-type': 'application/json', 'x-setup-token': server.token },
+    body: JSON.stringify({ credential: 'sk-payg', profile: 'coding-plan' }),
+  });
+  assert.equal(res.status, 400);
+  const body = await res.json();
+  assert.equal(body.status, 401);
+  assert.match(body.message, /invalid access token or token expired/);
+  assert.equal(written.length, 0);
+  server.close();
+  await server.done;
+  api.closeAllConnections();
+  api.close();
+});
+
+test('qwen: POST /save with a valid key writes the key and profile', async () => {
+  const seen = [];
+  const api = http.createServer((req, res) => {
+    let data = '';
+    req.on('data', (c) => { data += c; });
+    req.on('end', () => {
+      seen.push({ method: req.method, url: req.url, auth: req.headers.authorization, version: req.headers['anthropic-version'], body: data });
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end('{"id":"msg_1","type":"message","content":[{"type":"text","text":"p"}]}');
+    });
+  });
+  await new Promise((r) => api.listen(0, '127.0.0.1', r));
+  const written = [];
+  const server = await startSetupServer({ provider: qwen, current: {}, testUrl: `http://127.0.0.1:${api.address().port}/v1/messages`, writeEnv: async (v) => { written.push(v); } });
+  const res = await fetch(`http://127.0.0.1:${server.port}/save`, {
+    method: 'POST', headers: { 'content-type': 'application/json', 'x-setup-token': server.token },
+    body: JSON.stringify({ credential: ' cp-key ', profile: 'coding-plan' }),
+  });
+  assert.equal(res.status, 200, await res.text());
+  assert.deepEqual(written, [{ ANTHROPIC_AUTH_TOKEN: 'cp-key', WRAPPER_CODE_PROFILE: 'coding-plan' }]);
+  assert.equal(seen[0].method, 'POST');
+  assert.equal(seen[0].auth, 'Bearer cp-key');
+  assert.equal(seen[0].version, '2023-06-01');
+  assert.equal(JSON.parse(seen[0].body).max_tokens, 1);
+  await server.done;
+  api.closeAllConnections();
+  api.close();
 });

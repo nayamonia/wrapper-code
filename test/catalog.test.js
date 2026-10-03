@@ -116,3 +116,37 @@ test('loadCatalog loads ollama with the documented values', async () => {
   assert.equal(ol.test.auth, 'none');
   assert.equal('profiles' in ol, false);
 });
+
+test('validateProvider accepts test.headers and test.body objects and rejects non-objects', () => {
+  const withBody = { ...valid(), test: { method: 'POST', path: '/v1/messages', auth: 'bearer', headers: { 'anthropic-version': '2023-06-01' }, body: { max_tokens: 1 } } };
+  assert.doesNotThrow(() => validateProvider(withBody));
+  assert.throws(() => validateProvider({ ...withBody, test: { ...withBody.test, headers: 'nope' } }), /test\.headers/);
+  assert.throws(() => validateProvider({ ...withBody, test: { ...withBody.test, body: ['x'] } }), /test\.body/);
+  assert.throws(() => validateProvider({ ...withBody, test: { ...withBody.test, body: 'raw' } }), /test\.body/);
+});
+
+test('loadCatalog loads qwen with the Alibaba Coding Plan values', async () => {
+  const catalog = await loadCatalog();
+  const qw = catalog.get('qwen');
+  assert.ok(qw, 'qwen provider present');
+  assert.equal(qw.name, 'Qwen (Alibaba Model Studio)');
+  assert.equal(qw.credential.env, 'ANTHROPIC_AUTH_TOKEN');
+  assert.match(qw.credential.label, /Coding Plan/);
+  assert.equal(qw.env.ANTHROPIC_BASE_URL, 'https://coding-intl.dashscope.aliyuncs.com/apps/anthropic');
+  assert.equal(qw.defaultProfile, 'coding-plan');
+  assert.deepEqual(qw.profiles['coding-plan'].env, {
+    ANTHROPIC_MODEL: 'qwen3.7-plus',
+    ANTHROPIC_DEFAULT_HAIKU_MODEL: 'qwen3.7-plus',
+    ANTHROPIC_DEFAULT_SONNET_MODEL: 'qwen3.7-plus',
+    ANTHROPIC_DEFAULT_OPUS_MODEL: 'qwen3.7-plus',
+    CLAUDE_CODE_SUBAGENT_MODEL: 'qwen3.7-plus',
+  });
+  assert.equal(qw.test.method, 'POST');
+  assert.equal(qw.test.path, '/v1/messages');
+  assert.equal(qw.test.auth, 'bearer');
+  assert.equal(qw.test.headers['anthropic-version'], '2023-06-01');
+  assert.equal(qw.test.headers['content-type'], 'application/json');
+  assert.deepEqual(qw.test.body, { model: 'qwen3.7-plus', max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] });
+  assert.equal(qw.editableBaseUrl, false);
+  assert.equal(Object.isFrozen(qw.test.body), true, 'shared body object must not be mutable');
+});
