@@ -3,14 +3,42 @@
   "version": "0.1.0",
   "description": "Run the Claude Code CLI harness with other LLM providers (DeepSeek first) without touching your Claude Code configuration.",
   "type": "module",
-  "bin": { "wrapper-code": "./bin/wrapper-code.js" },
-  "files": ["bin", "src", "README.md", "LICENSE"],
-  "engines": { "node": ">=18" },
-  "scripts": { "test": "node --test", "brand:svg": "node scripts/render-splash-svg.mjs", "site": "node scripts/render-site.mjs" },
-  "keywords": ["claude-code", "deepseek", "llm", "cli", "wrapper"],
-  "author": { "name": "Gabriel Fernandes", "email": "gabriel@cd2.com.br", "url": "https://cd2.com.br" },
-  "repository": { "type": "git", "url": "git+https://github.com/nayamonia/wrapper-code.git" },
+  "bin": {
+    "wrapper-code": "bin/wrapper-code.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test",
+    "brand:svg": "node scripts/render-splash-svg.mjs",
+    "site": "node scripts/render-site.mjs"
+  },
+  "keywords": [
+    "claude-code",
+    "deepseek",
+    "llm",
+    "cli",
+    "wrapper"
+  ],
+  "author": {
+    "name": "Gabriel Fernandes",
+    "email": "gabriel@cd2.com.br",
+    "url": "https://cd2.com.br"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nayamonia/wrapper-code.git"
+  },
   "homepage": "https://nayamonia.github.io/wrapper-code/",
-  "bugs": { "url": "https://github.com/nayamonia/wrapper-code/issues" },
+  "bugs": {
+    "url": "https://github.com/nayamonia/wrapper-code/issues"
+  },
   "license": "MIT"
 }
