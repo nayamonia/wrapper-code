@@ -18,6 +18,8 @@ test('renderSite builds a self-contained landing page from the brand, the catalo
   assert.match(html, /Run Claude Code with any LLM/);
   assert.match(html, /npm install -g wrapper-code/);
   assert.match(html, /<div class="install" id="install">[^\n]*<span class="p">\$<\/span> wrapper-code deepseek<\/div>/, 'hero example uses deepseek');
+  assert.doesNotMatch(html, /<h3>8-bit<\/h3>/, 'no 8-bit card');
+  assert.match(html, /<h3>Side by side<\/h3><p>[^<]*several Claude Code sessions at the same time/, 'card about parallel sessions with different LLMs');
   assert.match(html, /v0\.1\.0/);
   for (const provider of catalog.values()) {
     assert.match(html, new RegExp(`<code>wrapper-code ${provider.id}</code>`), `install line for ${provider.id}`);
