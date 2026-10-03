@@ -288,6 +288,16 @@
   });
 
   var GONE = 'The setup server is no longer running. It may have been completed in another tab — check the terminal.';
+  // Providers answer errors as {"error":{"message":...}} (Anthropic style) or {"message":...} (Alibaba style).
+  function apiErrorMessage(raw) {
+    var msg = String(raw || 'Request failed');
+    try {
+      var inner = JSON.parse(msg);
+      if (inner && inner.error && typeof inner.error.message === 'string') return inner.error.message;
+      if (inner && typeof inner.message === 'string') return inner.message;
+    } catch (e) { /* not JSON, keep the raw message */ }
+    return msg;
+  }
   function show(kind, text) { var m = $('msg'); m.className = 'msg ' + kind; m.textContent = text; }
   function post(route, body) {
     return fetch(route, { method: 'POST', headers: { 'content-type': 'application/json', 'x-setup-token': token }, body: JSON.stringify(body) });
@@ -320,12 +330,7 @@
           show('ok', 'Done. You can return to the terminal.');
           $('cancel').disabled = true;
         } else {
-          var msg = String(r.body.message || 'Request failed');
-          try {
-            var inner = JSON.parse(msg);
-            if (inner && inner.error && typeof inner.error.message === 'string') msg = inner.error.message;
-          } catch (e) { /* not JSON, keep the raw message */ }
-          show('err', (r.body.status ? 'HTTP ' + r.body.status + ': ' : '') + msg);
+          show('err', (r.body.status ? 'HTTP ' + r.body.status + ': ' : '') + apiErrorMessage(r.body.message));
           $('save').disabled = false;
         }
       })

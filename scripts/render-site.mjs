@@ -33,7 +33,7 @@ export function renderSite({ catalog, version }) {
   const providers = [...catalog.values()];
   const chips = providers.map((p) => `<span class="chip">${esc(p.name)}</span>`).join('');
   const rows = providers.map(providerRow).join('\n');
-  const firstId = providers[0]?.id ?? 'deepseek';
+  const exampleId = catalog.has('deepseek') ? 'deepseek' : (providers[0]?.id ?? 'deepseek');
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -94,14 +94,14 @@ export function renderSite({ catalog, version }) {
     <div class="sprite" aria-hidden="true">${renderSvg(SPRITE)}</div>
     <h1>Run Claude Code with any LLM</h1>
     <p class="lead">One command, your provider, zero changes to your Claude Code configuration. The provider's settings live only inside that session.</p>
-    <div class="install" id="install"><span class="p">$</span> npm install -g wrapper-code<br><span class="p">$</span> wrapper-code ${esc(firstId)}</div>
+    <div class="install" id="install"><span class="p">$</span> npm install -g wrapper-code<br><span class="p">$</span> wrapper-code ${esc(exampleId)}</div>
     <div class="chips">${chips}</div>
   </section>
 
   <section class="grid">
     <div class="box"><h3>Isolated</h3><p>Only environment variables change, and only for that process. <code>claude</code> on its own keeps using Anthropic.</p></div>
     <div class="box"><h3>Setup in the browser</h3><p>The first launch opens a local page: paste the key, pick a model profile, and the key is tested before anything is saved.</p></div>
-    <div class="box"><h3>8-bit</h3><p>A pixel splash before Claude Code starts, because tools are allowed to be fun. Opt out with <code>WRAPPER_CODE_NO_SPLASH=1</code>.</p></div>
+    <div class="box"><h3>Side by side</h3><p>Run several Claude Code sessions at the same time on one computer, each with a different LLM: <code>wrapper-code deepseek</code> in one terminal, <code>wrapper-code qwencloud</code> in another, plain <code>claude</code> in a third.</p></div>
   </section>
 
   <section id="providers">

@@ -1,10 +1,24 @@
-import { test } from 'node:test';
+import { test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import { readFile } from 'node:fs/promises';
 import { startSetupServer, testCredential } from '../src/setup/server.js';
 import deepseek from '../src/providers/deepseek.js';
 import ollama from '../src/providers/ollama.js';
 import qwencloud from '../src/providers/qwencloud.js';
+
+// Servers opened by a test are closed after it even when an assertion fails first;
+// otherwise a failing test leaves sockets open and the file hangs instead of failing.
+const cleanups = [];
+function onCleanup(fn) {
+  let done = false;
+  const once = async () => { if (!done) { done = true; await fn(); } };
+  cleanups.push(once);
+  return once;
+}
+afterEach(async () => {
+  while (cleanups.length) await cleanups.pop()();
+});
 
 async function fakeApi(status) {
   const server = http.createServer((req, res) => {
@@ -32,7 +46,7 @@ async function boot({ status = 200, current = {}, timeoutMs, credentialTimeoutMs
     headers: { 'content-type': 'application/json', 'x-setup-token': token },
     body: JSON.stringify(body),
   });
-  const stop = async () => { server.close(); await server.done; api.close(); };
+  const stop = onCleanup(async () => { server.close(); await server.done; api.close(); });
   return { server, written, post, stop, api };
 }
 
@@ -338,7 +352,7 @@ async function bootOllama({ ollamaOpts, current, timeoutMs, testViaFake = false 
     body: JSON.stringify(body),
   });
   const get = (route) => fetch(`http://127.0.0.1:${server.port}${route}`, { headers: { 'x-setup-token': server.token } });
-  const stop = async () => { server.close(); await server.done; api.close(); };
+  const stop = onCleanup(async () => { server.close(); await server.done; api.close(); });
   return { server, api, written, post, get, stop };
 }
 
@@ -578,8 +592,10 @@ test('qwencloud: POST /save with a rejected key shows the backend 401 message an
     res.end();
   });
   await new Promise((r) => api.listen(0, '127.0.0.1', r));
+  onCleanup(() => { api.closeAllConnections(); api.close(); });
   const written = [];
   const server = await startSetupServer({ provider: qwencloud, current: {}, testUrl: `http://127.0.0.1:${api.address().port}/v1/messages`, writeEnv: async (v) => { written.push(v); } });
+  onCleanup(async () => { server.close(); await server.done; });
   const res = await fetch(`http://127.0.0.1:${server.port}/save`, {
     method: 'POST', headers: { 'content-type': 'application/json', 'x-setup-token': server.token },
     body: JSON.stringify({ credential: 'sk-wrong', profile: 'pay-as-you-go' }),
@@ -589,10 +605,6 @@ test('qwencloud: POST /save with a rejected key shows the backend 401 message an
   assert.equal(body.status, 401);
   assert.match(body.message, /Incorrect API key provided/);
   assert.equal(written.length, 0);
-  server.close();
-  await server.done;
-  api.closeAllConnections();
-  api.close();
 });
 
 test('qwencloud: POST /save with a valid key writes the key and profile', async () => {
@@ -607,8 +619,10 @@ test('qwencloud: POST /save with a valid key writes the key and profile', async 
     });
   });
   await new Promise((r) => api.listen(0, '127.0.0.1', r));
+  onCleanup(() => { api.closeAllConnections(); api.close(); });
   const written = [];
   const server = await startSetupServer({ provider: qwencloud, current: {}, testUrl: `http://127.0.0.1:${api.address().port}/v1/messages`, writeEnv: async (v) => { written.push(v); } });
+  onCleanup(async () => { server.close(); await server.done; });
   const res = await fetch(`http://127.0.0.1:${server.port}/save`, {
     method: 'POST', headers: { 'content-type': 'application/json', 'x-setup-token': server.token },
     body: JSON.stringify({ credential: ' sk-qc ', profile: 'pay-as-you-go' }),
@@ -621,8 +635,6 @@ test('qwencloud: POST /save with a valid key writes the key and profile', async 
   assert.equal(JSON.parse(seen[0].body).max_tokens, 1);
   assert.equal(JSON.parse(seen[0].body).model, 'qwen3.6-flash');
   await server.done;
-  api.closeAllConnections();
-  api.close();
 });
 
 test('testCredential for alibaba posts to the Token Plan endpoint', async () => {
@@ -634,4 +646,20 @@ test('testCredential for alibaba posts to the Token Plan endpoint', async () => 
   assert.equal(seen[0].init.method, 'POST');
   assert.equal(seen[0].init.headers.Authorization, 'Bearer sk-sp-x');
   assert.equal(JSON.parse(seen[0].init.body).max_tokens, 1);
+});
+
+async function loadApiErrorMessage() {
+  const html = await readFile(new URL('../src/setup/page.html', import.meta.url), 'utf8');
+  const src = html.match(/\n {2}function apiErrorMessage\(raw\) \{\n[\s\S]*?\n {2}\}\n/);
+  assert.ok(src, 'page.html defines apiErrorMessage(raw)');
+  return new Function(`${src[0]}; return apiErrorMessage;`)();
+}
+
+test('setup page reads the API error message from nested and top-level JSON bodies', async () => {
+  const apiErrorMessage = await loadApiErrorMessage();
+  assert.equal(apiErrorMessage('{"error":{"message":"invalid access token or token expired"}}'), 'invalid access token or token expired');
+  assert.equal(apiErrorMessage('{"request_id":"r1","code":"InvalidApiKey","message":"Incorrect API key provided."}'), 'Incorrect API key provided.');
+  assert.equal(apiErrorMessage('Unauthorized'), 'Unauthorized');
+  assert.equal(apiErrorMessage('{"code":"X"}'), '{"code":"X"}');
+  assert.equal(apiErrorMessage(''), 'Request failed');
 });
