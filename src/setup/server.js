@@ -121,6 +121,11 @@ export async function startSetupServer({
       called = true;
       finish(result);
     };
+    // A client that already disconnected will never emit these events.
+    if (res.destroyed || res.writableFinished) {
+      setImmediate(go);
+      return;
+    }
     res.once('finish', go);
     res.once('close', go);
   };

@@ -102,3 +102,7 @@ test('describeFetchError: cause with neither code nor message never prints undef
   assert.equal(out, 'fetch failed');
   assert.doesNotMatch(out, /undefined/);
 });
+
+test('describeFetchError: a thrown non-Error never prints undefined', () => {
+  assert.equal(describeFetchError('plain string'), 'plain string');
+});

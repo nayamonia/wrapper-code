@@ -272,6 +272,7 @@
     this.textContent = input.type === 'password' ? 'Show' : 'Hide';
   });
 
+  var GONE = 'The setup server is no longer running. It may have been completed in another tab — check the terminal.';
   function show(kind, text) { var m = $('msg'); m.className = 'msg ' + kind; m.textContent = text; }
   function post(route, body) {
     return fetch(route, { method: 'POST', headers: { 'content-type': 'application/json', 'x-setup-token': token }, body: JSON.stringify(body) });
@@ -313,11 +314,11 @@
           $('save').disabled = false;
         }
       })
-      .catch(function (err) { show('err', err.message); $('save').disabled = false; });
+      .catch(function () { show('err', GONE); $('save').disabled = false; });
   });
 
   $('cancel').addEventListener('click', function () {
-    post('/cancel', {}).then(function () { show('ok', 'Cancelled. Nothing was saved. You can close this tab.'); $('save').disabled = true; $('cancel').disabled = true; });
+    post('/cancel', {}).then(function () { show('ok', 'Cancelled. Nothing was saved. You can close this tab.'); $('save').disabled = true; $('cancel').disabled = true; }, function () { show('err', GONE); });
   });
 })();
 </script>

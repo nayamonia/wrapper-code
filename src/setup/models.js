@@ -3,8 +3,9 @@ export function joinUrl(baseUrl, path) {
 }
 
 export function describeFetchError(err) {
+  const base = String(err?.message ?? err);
   const reason = err?.cause?.code || err?.cause?.message;
-  return reason ? `${err.message} (${reason})` : String(err?.message);
+  return reason ? `${base} (${reason})` : base;
 }
 
 function normalize(entry, requireCapability) {

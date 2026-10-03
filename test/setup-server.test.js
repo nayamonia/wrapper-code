@@ -485,3 +485,31 @@ test('testCredential appends the network error cause code', async () => {
   assert.equal(result.status, 0);
   assert.match(result.message, /fetch failed.*ECONNREFUSED/);
 });
+
+test('client disconnect during the credential test still resolves done as saved once the write succeeds', async () => {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const { server, written, api } = await boot({
+    timeoutMs: 2000,
+    fetchImpl: async () => { await gate; return { ok: true, status: 200 }; },
+  });
+  const ac = new AbortController();
+  const req = fetch(`http://127.0.0.1:${server.port}/save`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-setup-token': server.token },
+    body: JSON.stringify({ credential: 'sk-test', profile: 'v4-pro' }),
+    signal: ac.signal,
+  }).catch(() => {});
+  await new Promise((r) => setTimeout(r, 100));
+  ac.abort();
+  await req;
+  await new Promise((r) => setTimeout(r, 100));
+  release();
+  const timeout = new Promise((r) => setTimeout(() => r('slow'), 1000));
+  const result = await Promise.race([server.done, timeout]);
+  assert.notEqual(result, 'slow');
+  assert.equal(result.saved, true);
+  assert.equal(written.length, 1);
+  assert.deepEqual(result.values, written[0]);
+  api.close();
+});
