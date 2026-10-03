@@ -62,3 +62,57 @@ test('every catalog entry is valid and keyed by its id', async () => {
     assert.doesNotThrow(() => validateProvider(provider));
   }
 });
+
+const validModels = () => ({
+  id: 'y', name: 'Y', docs: 'https://y', credential: null,
+  env: { ANTHROPIC_BASE_URL: 'http://localhost:1', ANTHROPIC_AUTH_TOKEN: 'y' },
+  models: { discoverPath: '/api/tags', requireCapability: 'tools', envKeys: ['ANTHROPIC_MODEL'], note: 'n' },
+  test: { method: 'GET', path: '/api/tags', auth: 'none' }, editableBaseUrl: true,
+});
+
+test('validateProvider accepts a models provider without profiles', () => {
+  assert.doesNotThrow(() => validateProvider(validModels()));
+});
+
+test('validateProvider rejects a provider with neither profiles nor models', () => {
+  const p = validModels();
+  delete p.models;
+  assert.throws(() => validateProvider(p), /profiles or models/);
+});
+
+test('validateProvider rejects a provider with both profiles and models', () => {
+  assert.throws(() => validateProvider({ ...valid(), models: validModels().models }), /not both/);
+});
+
+test('validateProvider rejects models without discoverPath or envKeys', () => {
+  assert.throws(() => validateProvider({ ...validModels(), models: { envKeys: ['A'] } }), /discoverPath/);
+  assert.throws(() => validateProvider({ ...validModels(), models: { discoverPath: '/x', envKeys: [] } }), /envKeys/);
+});
+
+test('validateProvider accepts test.path instead of test.url and rejects neither', () => {
+  assert.doesNotThrow(() => validateProvider({ ...valid(), test: { method: 'GET', path: '/models', auth: 'bearer' } }));
+  assert.throws(() => validateProvider({ ...valid(), test: { method: 'GET', auth: 'bearer' } }), /test/);
+});
+
+test('loadCatalog loads ollama with the documented values', async () => {
+  const catalog = await loadCatalog();
+  const ol = catalog.get('ollama');
+  assert.ok(ol, 'ollama provider present');
+  assert.equal(ol.name, 'Ollama');
+  assert.equal(ol.credential, null);
+  assert.equal(ol.editableBaseUrl, true);
+  assert.equal(ol.env.ANTHROPIC_BASE_URL, 'http://localhost:11434');
+  assert.equal(ol.env.ANTHROPIC_AUTH_TOKEN, 'ollama');
+  assert.equal(ol.models.discoverPath, '/api/tags');
+  assert.equal(ol.models.requireCapability, 'tools');
+  assert.deepEqual(ol.models.envKeys, [
+    'ANTHROPIC_MODEL',
+    'ANTHROPIC_DEFAULT_OPUS_MODEL',
+    'ANTHROPIC_DEFAULT_SONNET_MODEL',
+    'ANTHROPIC_DEFAULT_HAIKU_MODEL',
+    'CLAUDE_CODE_SUBAGENT_MODEL',
+  ]);
+  assert.equal(ol.test.path, '/api/tags');
+  assert.equal(ol.test.auth, 'none');
+  assert.equal('profiles' in ol, false);
+});
