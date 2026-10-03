@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { startSetupServer, testCredential } from '../src/setup/server.js';
 import deepseek from '../src/providers/deepseek.js';
+import ollama from '../src/providers/ollama.js';
 
 async function fakeApi(status) {
   const server = http.createServer((req, res) => {
@@ -84,6 +85,25 @@ test('POST /save with a valid key writes the file and resolves done', async () =
   const done = await server.done;
   assert.equal(done.saved, true);
   assert.deepEqual(done.values, written[0]);
+  api.close();
+});
+
+test('POST /save 200 closes the connection and the client reads the full body before done resolves', async () => {
+  const { server, post, api } = await boot();
+  const res = await post('/save', { credential: 'sk-test', profile: 'v4-pro' });
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('connection'), 'close');
+  assert.deepEqual(await res.json(), { ok: true });
+  assert.equal((await server.done).saved, true);
+  api.close();
+});
+
+test('POST /cancel 200 closes the connection and the body arrives intact', async () => {
+  const { server, post, api } = await boot();
+  const res = await post('/cancel', {});
+  assert.equal(res.headers.get('connection'), 'close');
+  assert.deepEqual(await res.json(), { ok: true });
+  assert.equal((await server.done).reason, 'cancelled');
   api.close();
 });
 
@@ -276,4 +296,220 @@ test('requests with a bad token do not keep the idle timer alive', async () => {
   assert.deepEqual(result, { saved: false, reason: 'timeout' });
   await spam;
   await stop();
+});
+
+const TAGS = {
+  models: [
+    { name: 'qwen3-code:14b', details: { parameter_size: '14.8B', context_length: 40960 }, capabilities: ['completion', 'tools'] },
+    { name: 'gemma3:4b', details: { parameter_size: '4.3B', context_length: 131072 }, capabilities: ['completion'] },
+  ],
+};
+
+async function fakeOllama({ tags = TAGS, status = 200 } = {}) {
+  const seen = [];
+  const server = http.createServer((req, res) => {
+    seen.push(req.url);
+    if (req.url === '/api/tags') {
+      res.writeHead(status, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(status === 200 ? tags : { error: 'down' }));
+      return;
+    }
+    res.writeHead(404);
+    res.end();
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  return { url: `http://127.0.0.1:${server.address().port}`, seen, close: () => { server.closeAllConnections(); server.close(); } };
+}
+
+async function bootOllama({ ollamaOpts, current, timeoutMs, testViaFake = false } = {}) {
+  const api = await fakeOllama(ollamaOpts);
+  const written = [];
+  const server = await startSetupServer({
+    provider: ollama,
+    current: { ANTHROPIC_BASE_URL: api.url, ...(current || {}) },
+    timeoutMs,
+    testUrl: testViaFake ? `${api.url}/api/tags` : undefined,
+    writeEnv: async (values) => { written.push(values); },
+  });
+  const post = (route, body) => fetch(`http://127.0.0.1:${server.port}${route}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-setup-token': server.token },
+    body: JSON.stringify(body),
+  });
+  const get = (route) => fetch(`http://127.0.0.1:${server.port}${route}`, { headers: { 'x-setup-token': server.token } });
+  const stop = async () => { server.close(); await server.done; api.close(); };
+  return { server, api, written, post, get, stop };
+}
+
+test('ollama: GET / carries discovery results, models metadata and no profiles', async () => {
+  const { server, api, stop } = await bootOllama({ current: { WRAPPER_CODE_MODEL: 'qwen3-code:14b' } });
+  const html = await (await fetch(server.url)).text();
+  const payload = JSON.parse(html.match(/var setup = (\{.*?\});\n/s)[1].replace(/<\\\//g, '</'));
+  assert.equal(payload.provider.id, 'ollama');
+  assert.equal('profiles' in payload.provider, false);
+  assert.deepEqual(payload.provider.models.envKeys, ollama.models.envKeys);
+  assert.equal(payload.provider.models.requireCapability, 'tools');
+  assert.equal(payload.discovery.ok, true);
+  assert.deepEqual(payload.discovery.models.map((m) => m.name), ['gemma3:4b', 'qwen3-code:14b']);
+  assert.equal(payload.discovery.models[1].tools, true);
+  assert.equal(payload.current.model, 'qwen3-code:14b');
+  assert.equal(payload.current.baseUrl, api.url);
+  assert.deepEqual(api.seen, ['/api/tags']);
+  await stop();
+});
+
+test('ollama: GET / still renders when Ollama is down and reports the error in discovery', async () => {
+  const { server, stop } = await bootOllama({ ollamaOpts: { status: 500 } });
+  const res = await fetch(server.url);
+  assert.equal(res.status, 200);
+  const html = await res.text();
+  assert.match(html, /"discovery":\{"ok":false/);
+  assert.match(html, /HTTP 500/);
+  await stop();
+});
+
+test('ollama: GET /models without the token is 403 and with it re-discovers from the given base URL', async () => {
+  const { server, get, stop } = await bootOllama();
+  const other = await fakeOllama({ tags: { models: [{ name: 'llama4:scout', details: { parameter_size: '109B', context_length: 10485760 }, capabilities: ['tools'] }] } });
+  assert.equal((await fetch(`http://127.0.0.1:${server.port}/models`)).status, 403);
+  const res = await get(`/models?baseUrl=${encodeURIComponent(`${other.url}/`)}`);
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.ok, true);
+  assert.deepEqual(body.models.map((m) => m.name), ['llama4:scout']);
+  assert.deepEqual(other.seen, ['/api/tags']);
+  other.close();
+  await stop();
+});
+
+test('ollama: GET /models with an empty baseUrl uses the saved one', async () => {
+  const { api, get, stop } = await bootOllama();
+  const body = await (await get('/models?baseUrl=')).json();
+  assert.equal(body.ok, true);
+  assert.equal(api.seen.filter((u) => u === '/api/tags').length, 1);
+  await stop();
+});
+
+test('ollama: POST /save writes model, base URL and context snapshot after testing the connection', async () => {
+  const { server, api, post, written } = await bootOllama();
+  const res = await post('/save', { model: 'qwen3-code:14b', baseUrl: `${api.url}/`, contextLength: 40960 });
+  assert.equal(res.status, 200, await res.text());
+  assert.deepEqual(written, [{
+    ANTHROPIC_BASE_URL: api.url,
+    WRAPPER_CODE_MODEL: 'qwen3-code:14b',
+    CLAUDE_CODE_AUTO_COMPACT_WINDOW: '40960',
+  }]);
+  assert.equal(api.seen.filter((u) => u === '/api/tags').length, 1, 'save tested /api/tags');
+  const done = await server.done;
+  assert.equal(done.saved, true);
+  api.close();
+});
+
+test('ollama: POST /save trims the typed model name and accepts a model not in the list', async () => {
+  const { api, post, written, stop } = await bootOllama();
+  const res = await post('/save', { model: '  gemma4:cloud \n', baseUrl: api.url });
+  assert.equal(res.status, 200);
+  assert.equal(written[0].WRAPPER_CODE_MODEL, 'gemma4:cloud');
+  assert.equal('CLAUDE_CODE_AUTO_COMPACT_WINDOW' in written[0], false);
+  await stop();
+});
+
+test('ollama: POST /save ignores every non-positive-integer contextLength', async () => {
+  for (const bad of ['40960', -5, 1.5, null]) {
+    const { api, post, written, stop } = await bootOllama();
+    const res = await post('/save', { model: 'qwen3-code:14b', baseUrl: api.url, contextLength: bad });
+    assert.equal(res.status, 200, `contextLength ${JSON.stringify(bad)}`);
+    assert.equal(written.length, 1);
+    assert.equal('CLAUDE_CODE_AUTO_COMPACT_WINDOW' in written[0], false, `contextLength ${JSON.stringify(bad)}`);
+    await stop();
+  }
+});
+
+test('ollama: POST /save without a model is 400 and writes nothing', async () => {
+  const { api, post, written, stop } = await bootOllama();
+  const res = await post('/save', { model: '   ', baseUrl: api.url });
+  assert.equal(res.status, 400);
+  assert.match((await res.json()).message, /Model is required/);
+  assert.equal(written.length, 0);
+  await stop();
+});
+
+test('ollama: POST /save against a dead base URL is 400 with status 0 and writes nothing', async () => {
+  const { post, written, stop } = await bootOllama();
+  const res = await post('/save', { model: 'qwen3-code:14b', baseUrl: 'http://127.0.0.1:9' });
+  assert.equal(res.status, 400);
+  const body = await res.json();
+  assert.equal(body.ok, false);
+  assert.equal(body.status, 0);
+  assert.equal(written.length, 0);
+  await stop();
+});
+
+test('ollama: POST /save with the default base URL (plus a slash) does not store ANTHROPIC_BASE_URL', async () => {
+  const { post, written, stop } = await bootOllama({ testViaFake: true, current: { ANTHROPIC_BASE_URL: undefined } });
+  const res = await post('/save', { model: 'qwen3-code:14b', baseUrl: 'http://localhost:11434/' });
+  assert.equal(res.status, 200, await res.text());
+  assert.equal('ANTHROPIC_BASE_URL' in written[0], false);
+  assert.equal(written[0].WRAPPER_CODE_MODEL, 'qwen3-code:14b');
+  await stop();
+});
+
+test('ollama: POST /save with a blank base URL drops a previously saved custom one', async () => {
+  const { post, written, stop } = await bootOllama({ testViaFake: true });
+  const res = await post('/save', { model: 'qwen3-code:14b', baseUrl: '  ' });
+  assert.equal(res.status, 200, await res.text());
+  assert.equal('ANTHROPIC_BASE_URL' in written[0], false);
+  await stop();
+});
+
+test('ollama: POST /save of the default URL removes a previously saved custom base URL', async () => {
+  const { post, written, stop } = await bootOllama({ testViaFake: true, current: { ANTHROPIC_BASE_URL: 'http://10.0.0.5:11434' } });
+  const res = await post('/save', { model: 'qwen3-code:14b', baseUrl: 'http://localhost:11434' });
+  assert.equal(res.status, 200, await res.text());
+  assert.equal('ANTHROPIC_BASE_URL' in written[0], false);
+  await stop();
+});
+
+test('testCredential builds the URL from baseUrl and test.path, tolerating a trailing slash', async () => {
+  const seen = [];
+  const fetchImpl = async (url, init) => { seen.push({ url, init }); return { ok: true, status: 200, statusText: 'OK', text: async () => '' }; };
+  const result = await testCredential(ollama, '', { fetchImpl, baseUrl: 'http://localhost:11434/' });
+  assert.deepEqual(result, { ok: true });
+  assert.equal(seen[0].url, 'http://localhost:11434/api/tags');
+  assert.equal('Authorization' in seen[0].init.headers, false);
+});
+
+test('testCredential appends the network error cause code', async () => {
+  const fetchImpl = async () => { throw new TypeError('fetch failed', { cause: { code: 'ECONNREFUSED' } }); };
+  const result = await testCredential(ollama, '', { fetchImpl, baseUrl: 'http://localhost:11434' });
+  assert.equal(result.status, 0);
+  assert.match(result.message, /fetch failed.*ECONNREFUSED/);
+});
+
+test('client disconnect during the credential test still resolves done as saved once the write succeeds', async () => {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const { server, written, api } = await boot({
+    timeoutMs: 2000,
+    fetchImpl: async () => { await gate; return { ok: true, status: 200 }; },
+  });
+  const ac = new AbortController();
+  const req = fetch(`http://127.0.0.1:${server.port}/save`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-setup-token': server.token },
+    body: JSON.stringify({ credential: 'sk-test', profile: 'v4-pro' }),
+    signal: ac.signal,
+  }).catch(() => {});
+  await new Promise((r) => setTimeout(r, 100));
+  ac.abort();
+  await req;
+  await new Promise((r) => setTimeout(r, 100));
+  release();
+  const timeout = new Promise((r) => setTimeout(() => r('slow'), 1000));
+  const result = await Promise.race([server.done, timeout]);
+  assert.notEqual(result, 'slow');
+  assert.equal(result.saved, true);
+  assert.equal(written.length, 1);
+  assert.deepEqual(result.values, written[0]);
+  api.close();
 });

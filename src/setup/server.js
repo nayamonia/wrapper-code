@@ -3,12 +3,13 @@ import { randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { derivedEnv } from '../env.js';
 import { CREDITS } from '../credits.js';
+import { describeFetchError, discoverModels, joinUrl } from './models.js';
 
 const PAGE_URL = new URL('./page.html', import.meta.url);
 const MAX_BODY = 64 * 1024;
 
-export async function testCredential(provider, credential, { fetchImpl = globalThis.fetch, testUrl, timeoutMs = 15000 } = {}) {
-  const url = testUrl || provider.test.url;
+export async function testCredential(provider, credential, { fetchImpl = globalThis.fetch, testUrl, timeoutMs = 15000, baseUrl } = {}) {
+  const url = testUrl || provider.test.url || joinUrl(baseUrl || provider.env.ANTHROPIC_BASE_URL, provider.test.path);
   const headers = {};
   if (provider.test.auth === 'bearer' && credential) headers.Authorization = `Bearer ${credential}`;
   try {
@@ -23,7 +24,7 @@ export async function testCredential(provider, credential, { fetchImpl = globalT
     }
     return { ok: false, status: res.status, message };
   } catch (err) {
-    return { ok: false, status: 0, message: err.message };
+    return { ok: false, status: 0, message: `Could not reach ${url}: ${describeFetchError(err)}` };
   }
 }
 
@@ -43,17 +44,18 @@ function readBody(req) {
   });
 }
 
-function sendJson(res, status, body) {
-  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+function sendJson(res, status, body, headers = {}) {
+  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...headers });
   res.end(JSON.stringify(body));
 }
 
-function pagePayload(provider, current, token) {
-  const profiles = {};
-  for (const [id, profile] of Object.entries(provider.profiles)) {
-    profiles[id] = { label: profile.label, env: derivedEnv(provider, id) };
-  }
-  return {
+function effectiveBaseUrl(provider, current, typed) {
+  return String(typed || '').trim() || current.ANTHROPIC_BASE_URL || provider.env.ANTHROPIC_BASE_URL || '';
+}
+
+async function pagePayload(provider, current, token, { fetchImpl, discoveryTimeoutMs }) {
+  const baseUrl = effectiveBaseUrl(provider, current);
+  const payload = {
     token,
     credits: CREDITS,
     provider: {
@@ -62,18 +64,35 @@ function pagePayload(provider, current, token) {
       docs: provider.docs,
       credential: provider.credential,
       editableBaseUrl: Boolean(provider.editableBaseUrl),
-      profiles,
+      env: provider.env,
     },
     current: {
-      profile: Object.hasOwn(provider.profiles, current.WRAPPER_CODE_PROFILE) ? current.WRAPPER_CODE_PROFILE : provider.defaultProfile,
       hasCredential: Boolean(provider.credential && current[provider.credential.env]),
-      baseUrl: current.ANTHROPIC_BASE_URL || provider.env.ANTHROPIC_BASE_URL || '',
+      baseUrl,
     },
   };
+  if (provider.models) {
+    payload.provider.models = {
+      envKeys: provider.models.envKeys,
+      requireCapability: provider.models.requireCapability,
+      note: provider.models.note || '',
+    };
+    payload.current.model = current.WRAPPER_CODE_MODEL || '';
+    payload.discovery = await discoverModels(provider, baseUrl, { fetchImpl, timeoutMs: discoveryTimeoutMs });
+  } else {
+    const profiles = {};
+    for (const [id, profile] of Object.entries(provider.profiles)) {
+      profiles[id] = { label: profile.label, env: derivedEnv(provider, id) };
+    }
+    payload.provider.profiles = profiles;
+    payload.current.profile = Object.hasOwn(provider.profiles, current.WRAPPER_CODE_PROFILE) ? current.WRAPPER_CODE_PROFILE : provider.defaultProfile;
+  }
+  return payload;
 }
 
 export async function startSetupServer({
-  provider, current = {}, writeEnv, fetchImpl = globalThis.fetch, testUrl, timeoutMs = 10 * 60 * 1000, credentialTimeoutMs = 15000,
+  provider, current = {}, writeEnv, fetchImpl = globalThis.fetch, testUrl,
+  timeoutMs = 10 * 60 * 1000, credentialTimeoutMs = 15000, discoveryTimeoutMs = 5000,
 }) {
   const token = randomBytes(32).toString('hex');
   const template = await readFile(PAGE_URL, 'utf8');
@@ -82,6 +101,7 @@ export async function startSetupServer({
   const done = new Promise((resolve) => { resolveDone = resolve; });
   let finished = false;
   let saving = false;
+  let closing = false;
   let timer;
 
   const finish = (result) => {
@@ -89,10 +109,25 @@ export async function startSetupServer({
     finished = true;
     clearTimeout(timer);
     resolveDone(result);
-    setImmediate(() => {
-      server.closeAllConnections?.();
-      server.close();
-    });
+    server.close();
+    setTimeout(() => server.closeAllConnections?.(), 1000).unref();
+  };
+  // Resolve only after the final response is flushed, so the client always reads it.
+  const finishAfter = (res, result) => {
+    closing = true;
+    let called = false;
+    const go = () => {
+      if (called) return;
+      called = true;
+      finish(result);
+    };
+    // A client that already disconnected will never emit these events.
+    if (res.destroyed || res.writableFinished) {
+      setImmediate(go);
+      return;
+    }
+    res.once('finish', go);
+    res.once('close', go);
   };
   const touch = () => {
     clearTimeout(timer);
@@ -111,20 +146,31 @@ export async function startSetupServer({
     touch();
 
     if (req.method === 'GET' && url.pathname === '/') {
-      const json = JSON.stringify(pagePayload(provider, current, token)).replace(/<\//g, '<\\/');
+      const payload = await pagePayload(provider, current, token, { fetchImpl, discoveryTimeoutMs });
+      const json = JSON.stringify(payload).replace(/<\//g, '<\\/');
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
       res.end(template.replace('__SETUP_JSON__', () => json));
       return;
     }
 
+    if (req.method === 'GET' && url.pathname === '/models') {
+      if (!provider.models) {
+        sendJson(res, 404, { ok: false, status: 0, message: 'This provider has no model discovery' });
+        return;
+      }
+      const baseUrl = effectiveBaseUrl(provider, current, url.searchParams.get('baseUrl'));
+      sendJson(res, 200, await discoverModels(provider, baseUrl, { fetchImpl, timeoutMs: discoveryTimeoutMs }));
+      return;
+    }
+
     if (req.method === 'POST' && url.pathname === '/cancel') {
-      sendJson(res, 200, { ok: true });
-      finish({ saved: false, reason: 'cancelled' });
+      sendJson(res, 200, { ok: true }, { connection: 'close' });
+      finishAfter(res, { saved: false, reason: 'cancelled' });
       return;
     }
 
     if (req.method === 'POST' && url.pathname === '/save') {
-      if (finished) {
+      if (finished || closing) {
         sendJson(res, 409, { ok: false, status: 0, message: 'Setup already finished' });
         return;
       }
@@ -141,12 +187,29 @@ export async function startSetupServer({
           sendJson(res, 400, { ok: false, status: 0, message: 'Invalid JSON body' });
           return;
         }
-        const profile = String(body.profile || '');
-        if (!Object.hasOwn(provider.profiles, profile)) {
-          sendJson(res, 400, { ok: false, status: 0, message: `Unknown profile "${profile}"` });
-          return;
+        const values = { ...current };
+        if (provider.models) {
+          const model = String(body.model || '').trim();
+          if (!model) {
+            sendJson(res, 400, { ok: false, status: 0, message: 'Model is required' });
+            return;
+          }
+          values.WRAPPER_CODE_MODEL = model;
+          delete values.WRAPPER_CODE_PROFILE;
+          const context = body.contextLength;
+          if (Number.isInteger(context) && context > 0) {
+            values.CLAUDE_CODE_AUTO_COMPACT_WINDOW = String(context);
+          } else {
+            delete values.CLAUDE_CODE_AUTO_COMPACT_WINDOW;
+          }
+        } else {
+          const profile = String(body.profile || '');
+          if (!Object.hasOwn(provider.profiles, profile)) {
+            sendJson(res, 400, { ok: false, status: 0, message: `Unknown profile "${profile}"` });
+            return;
+          }
+          values.WRAPPER_CODE_PROFILE = profile;
         }
-        const values = { ...current, WRAPPER_CODE_PROFILE: profile };
         let credential = '';
         if (provider.credential) {
           credential = String(body.credential || '').trim() || current[provider.credential.env] || '';
@@ -156,11 +219,18 @@ export async function startSetupServer({
           }
           values[provider.credential.env] = credential;
         }
-        if (provider.editableBaseUrl && String(body.baseUrl || '').trim()) {
-          values.ANTHROPIC_BASE_URL = String(body.baseUrl).trim();
+        if (provider.editableBaseUrl) {
+          // Only a base URL that differs from the provider default is stored.
+          const typed = String(body.baseUrl || '').trim().replace(/\/+$/, '');
+          if (typed && typed !== provider.env.ANTHROPIC_BASE_URL) {
+            values.ANTHROPIC_BASE_URL = typed;
+          } else {
+            delete values.ANTHROPIC_BASE_URL;
+          }
         }
-        const result = await testCredential(provider, credential, { fetchImpl, testUrl, timeoutMs: credentialTimeoutMs });
-        if (finished) {
+        const baseUrl = effectiveBaseUrl(provider, values);
+        const result = await testCredential(provider, credential, { fetchImpl, testUrl, timeoutMs: credentialTimeoutMs, baseUrl });
+        if (finished || closing) {
           sendJson(res, 409, { ok: false, status: 0, message: 'Setup already finished' });
           return;
         }
@@ -174,8 +244,8 @@ export async function startSetupServer({
           sendJson(res, 500, { ok: false, status: 0, message: err.message });
           return;
         }
-        sendJson(res, 200, { ok: true });
-        finish({ saved: true, values });
+        sendJson(res, 200, { ok: true }, { connection: 'close' });
+        finishAfter(res, { saved: true, values });
         return;
       } finally {
         saving = false;

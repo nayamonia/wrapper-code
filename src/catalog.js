@@ -12,24 +12,39 @@ export function validateProvider(provider) {
   const where = `provider "${provider.id}"`;
   if (typeof provider.name !== 'string' || !provider.name) throw new Error(`${where}: name is required`);
   if (!isObject(provider.env)) throw new Error(`${where}: env must be an object`);
-  if (!isObject(provider.profiles) || Object.keys(provider.profiles).length === 0) {
-    throw new Error(`${where}: profiles must have at least one entry`);
-  }
-  for (const [pid, profile] of Object.entries(provider.profiles)) {
-    if (!isObject(profile) || typeof profile.label !== 'string' || !isObject(profile.env)) {
-      throw new Error(`${where}: profiles.${pid} needs label and env`);
+  const hasProfiles = provider.profiles !== undefined;
+  const hasModels = provider.models !== undefined;
+  if (hasProfiles && hasModels) throw new Error(`${where}: use profiles or models, not both`);
+  if (!hasProfiles && !hasModels) throw new Error(`${where}: needs profiles or models`);
+  if (hasProfiles) {
+    if (!isObject(provider.profiles) || Object.keys(provider.profiles).length === 0) {
+      throw new Error(`${where}: profiles must have at least one entry`);
+    }
+    for (const [pid, profile] of Object.entries(provider.profiles)) {
+      if (!isObject(profile) || typeof profile.label !== 'string' || !isObject(profile.env)) {
+        throw new Error(`${where}: profiles.${pid} needs label and env`);
+      }
+    }
+    if (!Object.hasOwn(provider.profiles, provider.defaultProfile)) {
+      throw new Error(`${where}: defaultProfile "${provider.defaultProfile}" is not in profiles`);
     }
   }
-  if (!Object.hasOwn(provider.profiles, provider.defaultProfile)) {
-    throw new Error(`${where}: defaultProfile "${provider.defaultProfile}" is not in profiles`);
+  if (hasModels) {
+    const m = provider.models;
+    if (!isObject(m) || typeof m.discoverPath !== 'string' || !m.discoverPath.startsWith('/')) {
+      throw new Error(`${where}: models.discoverPath must be a path starting with /`);
+    }
+    if (!Array.isArray(m.envKeys) || m.envKeys.length === 0 || !m.envKeys.every((k) => typeof k === 'string')) {
+      throw new Error(`${where}: models.envKeys must be a non-empty array of strings`);
+    }
   }
   if (provider.credential !== null) {
     if (!isObject(provider.credential) || typeof provider.credential.env !== 'string' || typeof provider.credential.label !== 'string') {
       throw new Error(`${where}: credential must be null or { env, label, help }`);
     }
   }
-  if (!isObject(provider.test) || typeof provider.test.url !== 'string') {
-    throw new Error(`${where}: test must be { method, url, auth }`);
+  if (!isObject(provider.test) || (typeof provider.test.url !== 'string' && typeof provider.test.path !== 'string')) {
+    throw new Error(`${where}: test must be { method, url | path, auth }`);
   }
 }
 

@@ -251,3 +251,69 @@ test('reportFatal prints ConfigError plainly and other errors with a stack', () 
   reportFatal('just a string', c);
   assert.equal(c.text(), 'wrapper-code: unexpected error\njust a string\n');
 });
+
+test('ollama: launch with a base URL but no model opens setup instead of crashing', async () => {
+  const home = await tmp();
+  const opts = { platform: 'linux', env: {}, home };
+  await writeProviderEnv('ollama', { ANTHROPIC_BASE_URL: 'http://localhost:11434' }, opts);
+  const setups = [];
+  const code = await main(['ollama'], {
+    stdout: sink(), stderr: sink(), ...opts,
+    openBrowserImpl: () => true,
+    startSetupServerImpl: async (o) => { setups.push(o); return { url: 'u', done: Promise.resolve({ saved: false, reason: 'cancelled' }), close() {} }; },
+    launchImpl: async () => { throw new Error('must not launch'); },
+  });
+  assert.equal(code, 1);
+  assert.equal(setups[0].provider.id, 'ollama');
+  assert.deepEqual(setups[0].current, { ANTHROPIC_BASE_URL: 'http://localhost:11434' });
+});
+
+test('ollama: the launch banner names the model', async () => {
+  const home = await tmp();
+  const opts = { platform: 'linux', env: {}, home };
+  await writeProviderEnv('ollama', { WRAPPER_CODE_MODEL: 'qwen3-code:14b' }, opts);
+  const stdout = sink();
+  await main(['ollama'], { stdout, stderr: sink(), ...opts, resolveClaudeImpl: () => '/c', launchImpl: async () => ({ code: 0 }) });
+  assert.match(stdout.text(), /wrapper-code \d+\.\d+\.\d+ · Ollama \(qwen3-code:14b\) · MIT/);
+});
+
+test('end-to-end: ollama launches a fake claude with the five model vars, the auth token and no profile leak', { skip: isWin }, async () => {
+  const home = await tmp();
+  const binDir = path.join(home, 'fakebin');
+  await mkdir(binDir);
+  const out = path.join(home, 'out.json');
+  const fake = path.join(binDir, 'claude');
+  await writeFile(fake, `#!/usr/bin/env node
+require('fs').writeFileSync(process.env.FAKE_OUT, JSON.stringify({ argv: process.argv.slice(2), env: process.env }));
+process.exit(0);
+`);
+  await chmod(fake, 0o755);
+  await writeProviderEnv('ollama', { WRAPPER_CODE_MODEL: 'gemma3', ANTHROPIC_BASE_URL: 'http://10.0.0.5:11434', CLAUDE_CODE_AUTO_COMPACT_WINDOW: '131072' }, { platform: 'linux', env: {}, home });
+  const env = {
+    ...process.env,
+    HOME: home,
+    XDG_CONFIG_HOME: path.join(home, '.config'),
+    PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
+    FAKE_OUT: out,
+    ANTHROPIC_API_KEY: 'must-be-removed',
+  };
+  const result = await run(['ollama', '--model', 'qwen3:14b'], env);
+  assert.equal(result.code, 0, result.stderr);
+  const seen = JSON.parse(await readFile(out, 'utf8'));
+  assert.deepEqual(seen.argv, ['--model', 'qwen3:14b']);
+  assert.equal(seen.env.ANTHROPIC_BASE_URL, 'http://10.0.0.5:11434');
+  assert.equal(seen.env.ANTHROPIC_AUTH_TOKEN, 'ollama');
+  for (const key of ['ANTHROPIC_MODEL', 'ANTHROPIC_DEFAULT_OPUS_MODEL', 'ANTHROPIC_DEFAULT_SONNET_MODEL', 'ANTHROPIC_DEFAULT_HAIKU_MODEL', 'CLAUDE_CODE_SUBAGENT_MODEL']) {
+    assert.equal(seen.env[key], 'gemma3', key);
+  }
+  assert.equal(seen.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW, '131072');
+  assert.equal('ANTHROPIC_API_KEY' in seen.env, false);
+  assert.equal('WRAPPER_CODE_MODEL' in seen.env, false);
+  assert.equal('WRAPPER_CODE_PROFILE' in seen.env, false);
+});
+
+test('list shows ollama alongside deepseek', async () => {
+  const out = sink();
+  await main(['list'], { stdout: out, stderr: sink(), platform: 'linux', env: {}, home: await tmp() });
+  assert.match(out.text(), /ollama\s+Ollama\s+not configured/);
+});

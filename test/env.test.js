@@ -1,8 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ConfigError } from '../src/config.js';
-import { buildEnv, derivedEnv, isConfigured } from '../src/env.js';
+import { buildEnv, derivedEnv, isConfigured, modelEnv } from '../src/env.js';
 import deepseek from '../src/providers/deepseek.js';
+import ollama from '../src/providers/ollama.js';
 
 test('buildEnv layers process env < provider env < profile env < file values', () => {
   const env = buildEnv({
@@ -79,4 +80,40 @@ test('unknown profile (including prototype names) is a ConfigError with the setu
       (err) => err instanceof ConfigError && /wrapper-code setup deepseek/.test(err.message),
     );
   }
+});
+
+test('modelEnv sets every envKeys entry to the model name on top of provider env', () => {
+  const env = modelEnv(ollama, 'qwen3-code:14b');
+  assert.equal(env.ANTHROPIC_BASE_URL, 'http://localhost:11434');
+  assert.equal(env.ANTHROPIC_AUTH_TOKEN, 'ollama');
+  for (const key of ollama.models.envKeys) assert.equal(env[key], 'qwen3-code:14b');
+});
+
+test('buildEnv expands WRAPPER_CODE_MODEL for a models provider and keeps file overrides', () => {
+  const env = buildEnv({
+    provider: ollama,
+    fileValues: { WRAPPER_CODE_MODEL: 'gemma3', ANTHROPIC_BASE_URL: 'http://10.0.0.5:11434', CLAUDE_CODE_AUTO_COMPACT_WINDOW: '40960' },
+    baseEnv: { PATH: '/bin' },
+  });
+  assert.equal(env.PATH, '/bin');
+  assert.equal(env.ANTHROPIC_MODEL, 'gemma3');
+  assert.equal(env.CLAUDE_CODE_SUBAGENT_MODEL, 'gemma3');
+  assert.equal(env.ANTHROPIC_BASE_URL, 'http://10.0.0.5:11434');
+  assert.equal(env.ANTHROPIC_AUTH_TOKEN, 'ollama');
+  assert.equal(env.CLAUDE_CODE_AUTO_COMPACT_WINDOW, '40960');
+  assert.equal('WRAPPER_CODE_MODEL' in env, false);
+});
+
+test('buildEnv throws a ConfigError with the setup hint when a models provider has no model', () => {
+  assert.throws(
+    () => buildEnv({ provider: ollama, fileValues: { ANTHROPIC_BASE_URL: 'http://localhost:11434' }, baseEnv: {} }),
+    (err) => err instanceof ConfigError && /wrapper-code setup ollama/.test(err.message),
+  );
+});
+
+test('isConfigured requires WRAPPER_CODE_MODEL for a models provider', () => {
+  assert.equal(isConfigured(ollama, {}), false);
+  assert.equal(isConfigured(ollama, { ANTHROPIC_BASE_URL: 'http://localhost:11434' }), false);
+  assert.equal(isConfigured(ollama, { WRAPPER_CODE_MODEL: '' }), false);
+  assert.equal(isConfigured(ollama, { WRAPPER_CODE_MODEL: 'qwen3-code:14b' }), true);
 });
