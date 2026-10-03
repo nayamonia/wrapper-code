@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import { readFile } from 'node:fs/promises';
 import { startSetupServer, testCredential } from '../src/setup/server.js';
 import deepseek from '../src/providers/deepseek.js';
 import ollama from '../src/providers/ollama.js';
@@ -634,4 +635,20 @@ test('testCredential for alibaba posts to the Token Plan endpoint', async () => 
   assert.equal(seen[0].init.method, 'POST');
   assert.equal(seen[0].init.headers.Authorization, 'Bearer sk-sp-x');
   assert.equal(JSON.parse(seen[0].init.body).max_tokens, 1);
+});
+
+async function loadApiErrorMessage() {
+  const html = await readFile(new URL('../src/setup/page.html', import.meta.url), 'utf8');
+  const src = html.match(/\n {2}function apiErrorMessage\(raw\) \{\n[\s\S]*?\n {2}\}\n/);
+  assert.ok(src, 'page.html defines apiErrorMessage(raw)');
+  return new Function(`${src[0]}; return apiErrorMessage;`)();
+}
+
+test('setup page reads the API error message from nested and top-level JSON bodies', async () => {
+  const apiErrorMessage = await loadApiErrorMessage();
+  assert.equal(apiErrorMessage('{"error":{"message":"invalid access token or token expired"}}'), 'invalid access token or token expired');
+  assert.equal(apiErrorMessage('{"request_id":"r1","code":"InvalidApiKey","message":"Incorrect API key provided."}'), 'Incorrect API key provided.');
+  assert.equal(apiErrorMessage('Unauthorized'), 'Unauthorized');
+  assert.equal(apiErrorMessage('{"code":"X"}'), '{"code":"X"}');
+  assert.equal(apiErrorMessage(''), 'Request failed');
 });
