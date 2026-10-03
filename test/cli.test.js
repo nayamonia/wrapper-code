@@ -427,7 +427,7 @@ test('the retired ids qwen and alibaba-token are unknown and the message lists t
     const stderr = sink();
     const code = await main([old], { stdout: sink(), stderr, platform: 'linux', env: {}, home: await tmp() });
     assert.equal(code, 1);
-    assert.match(stderr.text(), new RegExp(`Unknown provider "${old}"\\. Available: alibaba, deepseek, ollama, qwencloud`));
+    assert.match(stderr.text(), new RegExp(`Unknown provider "${old}"\\. Available: alibaba, deepseek, ollama, openrouter, qwencloud`));
   }
 });
 

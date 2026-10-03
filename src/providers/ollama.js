@@ -20,6 +20,7 @@ export default {
       'CLAUDE_CODE_SUBAGENT_MODEL',
     ],
     note: 'Ollama serves requests at its own context length, not the model maximum: start it with OLLAMA_CONTEXT_LENGTH=65536 or more. --model on the command line overrides the main model for one session only.',
+    emptyHint: 'No models installed. Run: ollama pull qwen3-coder',
   },
   test: { method: 'GET', path: '/api/tags', auth: 'none' },
   editableBaseUrl: true,
