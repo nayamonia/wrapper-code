@@ -100,8 +100,8 @@ export function renderSite({ catalog, version }) {
 
   <section class="grid">
     <div class="box"><h3>Isolated</h3><p>Only environment variables change, and only for that process. <code>claude</code> on its own keeps using Anthropic.</p></div>
-    <div class="box"><h3>Setup in the browser</h3><p>The first launch opens a local page: paste the key, pick a model profile, and the key is tested before anything is saved.</p></div>
     <div class="box"><h3>Side by side</h3><p>Run several Claude Code sessions at the same time on one computer, each with a different LLM: <code>wrapper-code deepseek</code> in one terminal, <code>wrapper-code qwencloud</code> in another, plain <code>claude</code> in a third.</p></div>
+    <div class="box"><h3>Setup in the browser</h3><p>The first launch opens a local page: paste the key, pick a model profile, and the key is tested before anything is saved.</p></div>
   </section>
 
   <section id="providers">
