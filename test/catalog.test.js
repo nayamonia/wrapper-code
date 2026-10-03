@@ -165,11 +165,12 @@ const roles = (main, fast) => ({
   CLAUDE_CODE_SUBAGENT_MODEL: fast,
 });
 
-test('loadCatalog loads alibaba-token with the Alibaba Token Plan values and four profiles', async () => {
+test('loadCatalog loads alibaba with the Alibaba Token Plan values and four profiles', async () => {
   const catalog = await loadCatalog();
-  assert.equal(catalog.has('qwen-token'), false, 'renamed to alibaba-token');
-  const qt = catalog.get('alibaba-token');
-  assert.ok(qt, 'alibaba-token provider present');
+  assert.equal(catalog.has('alibaba-token'), false, 'renamed to alibaba');
+  assert.equal(catalog.has('qwen-token'), false);
+  const qt = catalog.get('alibaba');
+  assert.ok(qt, 'alibaba provider present');
   assert.equal(qt.name, 'Alibaba Token Plan');
   assert.equal(qt.credential.env, 'ANTHROPIC_AUTH_TOKEN');
   assert.match(qt.credential.label, /Token Plan/);
@@ -189,10 +190,12 @@ test('loadCatalog loads alibaba-token with the Alibaba Token Plan values and fou
   assert.equal(qt.editableBaseUrl, false);
 });
 
-test('qwen help text tells sk-sp- Token Plan keys to use alibaba-token', async () => {
+test('help texts no longer mention the Coding Plan or the old ids', async () => {
   const catalog = await loadCatalog();
-  const help = catalog.get('qwen').credential.help;
-  assert.match(help, /sk-sp-/);
-  assert.match(help, /alibaba-token/);
-  assert.doesNotMatch(help, /pay-as-you-go sk- key does not work/);
+  const alibaba = catalog.get('alibaba').credential.help;
+  assert.match(alibaba, /sk-sp-/);
+  assert.doesNotMatch(alibaba, /Coding Plan|wrapper-code qwen\b|alibaba-token/);
+  const qwencloud = catalog.get('qwencloud').credential.help;
+  assert.doesNotMatch(qwencloud, /Coding Plan|alibaba-token/);
+  assert.deepEqual([...catalog.keys()].sort(), ['alibaba', 'deepseek', 'ollama', 'qwencloud']);
 });

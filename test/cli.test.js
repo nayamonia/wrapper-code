@@ -394,7 +394,7 @@ process.exit(0);
   assert.equal('WRAPPER_CODE_PROFILE' in seen.env, false);
 });
 
-test('end-to-end: alibaba-token launches a fake claude with the Token Plan env', { skip: isWin }, async () => {
+test('end-to-end: alibaba launches a fake claude with the Token Plan env', { skip: isWin }, async () => {
   const home = await tmp();
   const binDir = path.join(home, 'fakebin');
   await mkdir(binDir);
@@ -405,7 +405,7 @@ require('fs').writeFileSync(process.env.FAKE_OUT, JSON.stringify({ argv: process
 process.exit(0);
 `);
   await chmod(fake, 0o755);
-  await writeProviderEnv('alibaba-token', { ANTHROPIC_AUTH_TOKEN: 'tp-e2e', WRAPPER_CODE_PROFILE: 'deepseek-pro' }, { platform: 'linux', env: {}, home });
+  await writeProviderEnv('alibaba', { ANTHROPIC_AUTH_TOKEN: 'tp-e2e', WRAPPER_CODE_PROFILE: 'deepseek-pro' }, { platform: 'linux', env: {}, home });
   const env = {
     ...process.env,
     HOME: home,
@@ -413,7 +413,7 @@ process.exit(0);
     PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
     FAKE_OUT: out,
   };
-  const result = await run(['alibaba-token'], env);
+  const result = await run(['alibaba'], env);
   assert.equal(result.code, 0, result.stderr);
   const seen = JSON.parse(await readFile(out, 'utf8'));
   assert.equal(seen.env.ANTHROPIC_BASE_URL, 'https://token-plan.ap-southeast-1.maas.aliyuncs.com/apps/anthropic');

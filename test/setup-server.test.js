@@ -625,11 +625,11 @@ test('qwencloud: POST /save with a valid key writes the key and profile', async 
   api.close();
 });
 
-test('testCredential for alibaba-token posts to the Token Plan endpoint', async () => {
-  const { default: qwenToken } = await import('../src/providers/alibaba-token.js');
+test('testCredential for alibaba posts to the Token Plan endpoint', async () => {
+  const { default: alibaba } = await import('../src/providers/alibaba.js');
   const seen = [];
   const fetchImpl = async (url, init) => { seen.push({ url, init }); return { ok: true, status: 200, statusText: 'OK', text: async () => '' }; };
-  assert.deepEqual(await testCredential(qwenToken, 'sk-sp-x', { fetchImpl }), { ok: true });
+  assert.deepEqual(await testCredential(alibaba, 'sk-sp-x', { fetchImpl }), { ok: true });
   assert.equal(seen[0].url, 'https://token-plan.ap-southeast-1.maas.aliyuncs.com/apps/anthropic/v1/messages');
   assert.equal(seen[0].init.method, 'POST');
   assert.equal(seen[0].init.headers.Authorization, 'Bearer sk-sp-x');
