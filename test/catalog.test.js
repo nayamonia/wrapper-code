@@ -125,30 +125,36 @@ test('validateProvider accepts test.headers and test.body objects and rejects no
   assert.throws(() => validateProvider({ ...withBody, test: { ...withBody.test, body: 'raw' } }), /test\.body/);
 });
 
-test('loadCatalog loads qwen with the Alibaba Coding Plan values', async () => {
+test('loadCatalog loads qwencloud with the Qwen Cloud pay-as-you-go values', async () => {
   const catalog = await loadCatalog();
-  const qw = catalog.get('qwen');
-  assert.ok(qw, 'qwen provider present');
-  assert.equal(qw.name, 'Qwen (Alibaba Model Studio)');
-  assert.equal(qw.credential.env, 'ANTHROPIC_AUTH_TOKEN');
-  assert.match(qw.credential.label, /Coding Plan/);
-  assert.equal(qw.env.ANTHROPIC_BASE_URL, 'https://coding-intl.dashscope.aliyuncs.com/apps/anthropic');
-  assert.equal(qw.defaultProfile, 'coding-plan');
-  assert.deepEqual(qw.profiles['coding-plan'].env, {
-    ANTHROPIC_MODEL: 'qwen3.7-plus',
-    ANTHROPIC_DEFAULT_HAIKU_MODEL: 'qwen3.7-plus',
-    ANTHROPIC_DEFAULT_SONNET_MODEL: 'qwen3.7-plus',
-    ANTHROPIC_DEFAULT_OPUS_MODEL: 'qwen3.7-plus',
-    CLAUDE_CODE_SUBAGENT_MODEL: 'qwen3.7-plus',
+  assert.equal(catalog.has('qwen'), false, 'the Coding Plan provider is gone');
+  const qc = catalog.get('qwencloud');
+  assert.ok(qc, 'qwencloud provider present');
+  assert.equal(qc.name, 'Qwen Cloud');
+  assert.equal(qc.docs, 'https://docs.qwencloud.com/developer-guides/clients-and-developer-tools/claude-code');
+  assert.equal(qc.credential.env, 'ANTHROPIC_AUTH_TOKEN');
+  assert.equal(qc.credential.label, 'Qwen Cloud API key');
+  assert.match(qc.credential.help, /home\.qwencloud\.com\/api-keys/);
+  assert.doesNotMatch(qc.credential.help, /Coding Plan/);
+  assert.deepEqual(qc.env, { ANTHROPIC_BASE_URL: 'https://maas.qwencloudapi.com/apps/anthropic' });
+  assert.deepEqual(Object.keys(qc.profiles), ['pay-as-you-go']);
+  assert.equal(qc.defaultProfile, 'pay-as-you-go');
+  assert.deepEqual(qc.profiles['pay-as-you-go'].env, {
+    ANTHROPIC_MODEL: 'auto',
+    ANTHROPIC_DEFAULT_HAIKU_MODEL: 'qwen3.6-flash',
+    ANTHROPIC_DEFAULT_SONNET_MODEL: 'qwen3.8-flash',
+    ANTHROPIC_DEFAULT_OPUS_MODEL: 'qwen3.8-max',
+    CLAUDE_CODE_SUBAGENT_MODEL: 'auto',
+    CLAUDE_CODE_MAX_CONTEXT_TOKENS: '983616',
   });
-  assert.equal(qw.test.method, 'POST');
-  assert.equal(qw.test.path, '/v1/messages');
-  assert.equal(qw.test.auth, 'bearer');
-  assert.equal(qw.test.headers['anthropic-version'], '2023-06-01');
-  assert.equal(qw.test.headers['content-type'], 'application/json');
-  assert.deepEqual(qw.test.body, { model: 'qwen3.7-plus', max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] });
-  assert.equal(qw.editableBaseUrl, false);
-  assert.equal(Object.isFrozen(qw.test.body), true, 'shared body object must not be mutable');
+  assert.equal(qc.test.method, 'POST');
+  assert.equal(qc.test.path, '/v1/messages');
+  assert.equal(qc.test.auth, 'bearer');
+  assert.equal(qc.test.headers['anthropic-version'], '2023-06-01');
+  assert.equal(qc.test.headers['content-type'], 'application/json');
+  assert.deepEqual(qc.test.body, { model: 'qwen3.6-flash', max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] });
+  assert.equal(Object.isFrozen(qc.test.body), true, 'shared body object must not be mutable');
+  assert.equal(qc.editableBaseUrl, false);
 });
 
 const roles = (main, fast) => ({
