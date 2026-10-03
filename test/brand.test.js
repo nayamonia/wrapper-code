@@ -47,7 +47,29 @@ test('renderSvg emits one rect per lit pixel with crisp edges and optional size'
   assert.equal((svg.match(/<rect /g) || []).length, 2);
   assert.match(svg, /fill="#ff2d95"/);
   assert.match(svg, /fill="#2de2e6"/);
-  assert.doesNotMatch(renderSvg(['p']), /width=/);
+  // Without px, the SVG opening tag should not have width/height attributes
+  const tagMatch = renderSvg(['p']).match(/^<svg [^>]*>/);
+  assert.doesNotMatch(tagMatch[0], /width=|height=/);
+});
+
+test('renderSvg: all rects always have width="1" height="1" (regression)', () => {
+  const svg1 = renderSvg(['p.', '.c']);
+  const svg2 = renderSvg(['p.', '.c'], { px: 10 });
+  const rects1 = svg1.match(/<rect [^>]*>/g) || [];
+  const rects2 = svg2.match(/<rect [^>]*>/g) || [];
+  const withWidth1 = rects1.filter((r) => /width="1" height="1"/.test(r)).length;
+  const withWidth2 = rects2.filter((r) => /width="1" height="1"/.test(r)).length;
+  assert.equal(withWidth1, rects1.length, 'all rects have width/height without px');
+  assert.equal(withWidth2, rects2.length, 'all rects have width/height with px');
+});
+
+test('faviconDataUri: decoded SVG has all rects with width/height (regression)', () => {
+  const uri = faviconDataUri();
+  const svg = decodeURIComponent(uri.slice('data:image/svg+xml;utf8,'.length));
+  const rects = svg.match(/<rect [^>]*>/g) || [];
+  const withWidth = rects.filter((r) => /width="1" height="1"/.test(r)).length;
+  assert.ok(rects.length > 50, 'sprite has many rects');
+  assert.equal(withWidth, rects.length, 'every sprite rect has width="1" height="1"');
 });
 
 test('renderHalfBlocks pairs rows into ▀▄ cells and resets at the end of colored lines', () => {

@@ -71,12 +71,7 @@ export function renderSvg(rows, { px, className } = {}) {
   const rects = [];
   rows.forEach((row, y) => {
     [...row].forEach((code, x) => {
-      if (code !== '.') {
-        let rect = `<rect x="${x}" y="${y}"`;
-        if (px) rect += ' width="1" height="1"';
-        rect += ` fill="${PALETTE[colorOf(code)]}"/>`;
-        rects.push(rect);
-      }
+      if (code !== '.') rects.push(`<rect x="${x}" y="${y}" width="1" height="1" fill="${PALETTE[colorOf(code)]}"/>`);
     });
   });
   return `<svg ${attrs.join(' ')}>${rects.join('')}</svg>`;
