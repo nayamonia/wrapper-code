@@ -58,18 +58,6 @@ export function validateProvider(provider) {
   if (provider.test.body !== undefined && !isObject(provider.test.body)) {
     throw new Error(`${where}: test.body must be a plain object (it is sent as JSON)`);
   }
-  if (provider.pricing !== undefined) {
-    if (!isObject(provider.pricing)) throw new Error(`${where}: pricing must be an object keyed by model id`);
-    for (const [model, p] of Object.entries(provider.pricing)) {
-      const ok = isObject(p) && typeof p.in === 'number' && typeof p.out === 'number'
-        && (p.cacheRead === undefined || typeof p.cacheRead === 'number')
-        && (p.cacheWrite === undefined || typeof p.cacheWrite === 'number');
-      if (!ok) throw new Error(`${where}: pricing.${model} must be { in, out, cacheRead?, cacheWrite? } in USD per million tokens`);
-    }
-  }
-  if (provider.freeOfCharge !== undefined && typeof provider.freeOfCharge !== 'boolean') {
-    throw new Error(`${where}: freeOfCharge must be a boolean`);
-  }
 }
 
 export async function loadCatalog(dirUrl = PROVIDERS_DIR) {

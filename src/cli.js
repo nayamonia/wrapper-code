@@ -12,7 +12,6 @@ import { creditLine } from './credits.js';
 import { showSplash, shouldSplash } from './splash.js';
 import { runUsage } from './usage/report.js';
 import { startUsageReceiver, TOKEN_HEADER as USAGE_TOKEN_HEADER } from './usage/receiver.js';
-import { resolvePrices, estimateCost } from './usage/pricing.js';
 import { appendUsage, usageFilePath } from './usage/store.js';
 import { renderSummary } from './usage/summary.js';
 import { supportsTruecolor } from './brand.js';
@@ -27,7 +26,7 @@ Usage:
   wrapper-code setup <provider>              Open the setup page to change the key or model profile
   wrapper-code list                          List providers and whether they are configured
   wrapper-code usage [--since 24h|7d|30d|all] [--provider <id>] [--by-day] [--json]
-                                             Token usage and estimated cost per provider and model
+                                             Token usage per provider and model
   wrapper-code --help | --version
 
 Config files live in ~/.config/wrapper-code (POSIX) or %APPDATA%\\wrapper-code (Windows).
@@ -221,8 +220,7 @@ export async function main(argv, deps = {}) {
       receiver = await startUsageReceiverImpl({
         lingerMs,
         onEvent: (raw, ts) => {
-          const prices = resolvePrices({ provider, fileValues: values, model: raw.model });
-          collected.push({ ts, sessionId, provider: provider.id, selection, ...raw, costUsd: estimateCost(raw, prices) });
+          collected.push({ ts, sessionId, provider: provider.id, selection, ...raw });
         },
       });
       for (const key of Object.keys(childEnv)) if (/^OTEL_EXPORTER_OTLP_LOGS_/.test(key)) delete childEnv[key];
@@ -231,7 +229,6 @@ export async function main(argv, deps = {}) {
       stdout.write(`usage: receiver could not start (${err.message}); session runs without usage tracking\n`);
     }
   }
-  delete childEnv.WRAPPER_CODE_USAGE_LINGER_MS;
 
   let startedAt;
   let code;

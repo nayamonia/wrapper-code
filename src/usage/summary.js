@@ -9,17 +9,14 @@ export function abbreviate(n) {
 }
 
 export function summarize(events) {
-  const s = { requests: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, costUsd: null, unpriced: 0 };
+  const s = { requests: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 };
   for (const e of events) {
     s.requests += 1;
     s.inputTokens += e.inputTokens || 0;
     s.outputTokens += e.outputTokens || 0;
     s.cacheReadTokens += e.cacheReadTokens || 0;
     s.cacheCreationTokens += e.cacheCreationTokens || 0;
-    if (typeof e.costUsd === 'number') s.costUsd = (s.costUsd ?? 0) + e.costUsd;
-    else s.unpriced += 1;
   }
-  if (s.costUsd !== null) s.costUsd = Math.round(s.costUsd * 1e6) / 1e6;
   return s;
 }
 
@@ -28,12 +25,6 @@ function duration(startedAt, endedAt) {
   if (min < 1) return 'under a minute';
   if (min < 60) return `${min} min`;
   return `${Math.floor(min / 60)} h ${min % 60} min`;
-}
-
-function costText(s) {
-  if (s.costUsd === null) return 'cost unknown';
-  const dollars = `$${s.costUsd.toFixed(2)}`;
-  return s.unpriced ? `estimated cost ≥ ${dollars} (${s.unpriced} unpriced)` : `estimated cost ${dollars}`;
 }
 
 export function summaryLines({ providerName, selection, events, startedAt, endedAt, file, saved = true, malformed = 0, reason, truecolor }) {
@@ -46,7 +37,7 @@ export function summaryLines({ providerName, selection, events, startedAt, ended
   } else {
     const s = summarize(events);
     lines.push(`  requests ${s.requests} · in ${abbreviate(s.inputTokens)} · out ${abbreviate(s.outputTokens)} · cache read ${abbreviate(s.cacheReadTokens)} · cache write ${abbreviate(s.cacheCreationTokens)}`);
-    let last = `  ${costText(s)} · ${saved ? `saved to ${file}` : 'not saved'}`;
+    let last = `  ${saved ? `saved to ${file}` : 'not saved'}`;
     if (malformed > 0) last += ` · ${malformed} malformed records ignored`;
     lines.push(last);
   }

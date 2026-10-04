@@ -608,10 +608,12 @@ fetch(process.env.OTEL_EXPORTER_OTLP_ENDPOINT + '/v1/logs', { method: 'POST', he
   const result = await run(['deepseek'], env);
   assert.equal(result.code, 5, result.stderr);
   assert.match(result.stdout, /requests 1 · in /);
+  assert.doesNotMatch(result.stdout, /cost|\$/, 'the summary shows no price');
   assert.match(result.stdout, /saved to .*usage\.jsonl/);
   const { events } = await readUsage(cfg);
   assert.equal(events.length, 1);
   assert.equal(events[0].provider, 'deepseek');
+  assert.equal('costUsd' in events[0], false, 'stored events carry no cost');
   assert.equal(events[0].selection, 'flash-1m');
   assert.ok(events[0].outputTokens > 0);
   assert.match(events[0].sessionId, /^[0-9a-f]{16}$/);
@@ -777,7 +779,7 @@ test('a failed usage write prints the summary with "not saved", then one warning
   assert.equal(code, 3);
   const all = log.map(([, s]) => s).join('');
   assert.match(all, /requests 1 · /);
-  assert.match(all, / · not saved/);
+  assert.match(all, /^  not saved$/m);
   assert.doesNotMatch(all, /saved to/);
   const summaryAt = log.findIndex(([t, s]) => t === 'out' && /not saved/.test(s));
   const warnings = log.filter(([t, s]) => t === 'err' && /usage: could not write/.test(s));

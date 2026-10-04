@@ -11,7 +11,6 @@ const roles = (main, fast) => ({
   CLAUDE_CODE_SUBAGENT_MODEL: fast,
 });
 
-// Token Plan is prepaid; no per-token price, so usage shows tokens only.
 export default {
   id: 'alibaba',
   name: 'Alibaba Token Plan',

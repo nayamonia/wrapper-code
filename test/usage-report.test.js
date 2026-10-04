@@ -29,25 +29,25 @@ test('parseSince understands hours, days and all', () => {
   assert.equal(parseSince('0d', NOW), null);
 });
 
-test('aggregate groups by provider and model inside the window, with cost and unpriced counts', () => {
+test('aggregate groups by provider and model inside the window, with token totals and no cost fields', () => {
   const { groups, total } = aggregate(EVENTS, { since: NOW - 30 * 86400e3 });
-  assert.deepEqual(groups.map((g) => [g.provider, g.model, g.requests, g.outputTokens, g.costUsd]), [
-    ['deepseek', 'deepseek-flash', 2, 400, 0.002],
-    ['deepseek', 'deepseek-v4-pro', 1, 100, 0.5],
-    ['ollama', 'qwen3-code:14b', 1, 100, 0],
+  assert.deepEqual(groups.map((g) => [g.provider, g.model, g.requests, g.outputTokens]), [
+    ['deepseek', 'deepseek-flash', 2, 400],
+    ['deepseek', 'deepseek-v4-pro', 1, 100],
+    ['ollama', 'qwen3-code:14b', 1, 100],
   ]);
   assert.equal(total.requests, 4);
-  assert.equal(total.costUsd, 0.502);
-  assert.equal(total.unpriced, 0);
+  assert.equal(total.inputTokens, 4000);
+  for (const bucket of [...groups, total]) {
+    assert.equal('costUsd' in bucket, false);
+    assert.equal('unpriced' in bucket, false);
+  }
 });
 
-test('aggregate with --since all includes unpriced events and marks them', () => {
+test('aggregate with --since all includes older events', () => {
   const { groups, total } = aggregate(EVENTS, { since: 0 });
-  const auto = groups.find((g) => g.model === 'auto');
-  assert.equal(auto.costUsd, null);
-  assert.equal(auto.unpriced, 1);
-  assert.equal(total.unpriced, 1);
-  assert.equal(total.costUsd, 0.502, 'null costs do not poison the total');
+  assert.equal(groups.find((g) => g.model === 'auto').requests, 1);
+  assert.equal(total.requests, 5);
 });
 
 test('aggregate filters by provider and splits by day when asked', () => {
@@ -58,14 +58,15 @@ test('aggregate filters by provider and splits by day when asked', () => {
   ]);
 });
 
-test('renderReport prints a table with a total row and the skipped-lines footer', () => {
+test('renderReport prints a token table with a total row and the skipped-lines footer, and no cost', () => {
   const r = aggregate(EVENTS, { since: 0 });
   const text = renderReport({ ...r, skipped: 2, since: 'all' });
-  assert.match(text, /provider\s+model\s+requests\s+in\s+out\s+cache read\s+cache write\s+est\. cost/);
-  assert.match(text, /deepseek\s+deepseek-flash\s+2\s+2\.0k\s+400\s+0\s+0\s+\$0\.00/);
-  assert.match(text, /qwencloud\s+auto\s+1\s+1\.0k\s+100\s+0\s+0\s+unknown \(1 unpriced\)/);
-  assert.match(text, /total\s+5\s+.*≥ \$0\.50 \(1 unpriced\)/);
+  assert.match(text, /provider\s+model\s+requests\s+in\s+out\s+cache read\s+cache write$/m);
+  assert.match(text, /deepseek\s+deepseek-flash\s+2\s+2\.0k\s+400\s+0\s+0$/m);
+  assert.match(text, /qwencloud\s+auto\s+1\s+1\.0k\s+100\s+0\s+0$/m);
+  assert.match(text, /total\s+5\s+5\.0k\s+700\s+0\s+0$/m);
   assert.match(text, /2 malformed lines skipped/);
+  assert.doesNotMatch(text, /cost|\$|unpriced/);
 });
 
 test('runUsage reads the store, applies flags and supports --json; empty store says so', async () => {
@@ -82,16 +83,10 @@ test('runUsage reads the store, applies flags and supports --json; empty store s
   assert.equal(json.since, '7d');
   assert.equal(json.groups.length, 2);
   assert.equal(json.total.requests, 3);
+  assert.equal('costUsd' in json.total, false);
   const err = out();
   assert.equal(await runUsage(['--since', 'yesterday'], { cfg, stdout: out(), stderr: err, now: NOW }), 1);
   assert.match(err.text(), /usage: --since expects 24h, 7d, 30d or all/);
-});
-
-test('renderReport says how many events were unpriced when none is priced', () => {
-  const r = aggregate([ev('2026-10-03T11:00:00Z', 'qwencloud', 'auto', { costUsd: null }), ev('2026-10-03T11:10:00Z', 'qwencloud', 'auto', { costUsd: null })], { since: 0 });
-  const lines = renderReport({ ...r, skipped: 0, since: 'all' }).trimEnd().split('\n');
-  assert.match(lines.at(-1), /total\s+2\s.*unknown \(2 unpriced\)$/);
-  assert.match(lines.at(-2), /unknown \(2 unpriced\)$/);
 });
 
 test('runUsage survives a corrupt-but-valid-JSON line and counts it in the footer', async () => {

@@ -10,7 +10,7 @@ export function parseSince(text, now) {
 }
 
 function newBucket(key) {
-  return { ...key, requests: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, costUsd: null, unpriced: 0 };
+  return { ...key, requests: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 };
 }
 
 function add(bucket, e) {
@@ -19,13 +19,6 @@ function add(bucket, e) {
   bucket.outputTokens += e.outputTokens || 0;
   bucket.cacheReadTokens += e.cacheReadTokens || 0;
   bucket.cacheCreationTokens += e.cacheCreationTokens || 0;
-  if (typeof e.costUsd === 'number') bucket.costUsd = (bucket.costUsd ?? 0) + e.costUsd;
-  else bucket.unpriced += 1;
-}
-
-function round(bucket) {
-  if (bucket.costUsd !== null) bucket.costUsd = Math.round(bucket.costUsd * 1e6) / 1e6;
-  return bucket;
 }
 
 export function aggregate(events, { since = 0, provider, byDay = false } = {}) {
@@ -41,24 +34,18 @@ export function aggregate(events, { since = 0, provider, byDay = false } = {}) {
     add(groups.get(key), e);
     add(total, e);
   }
-  const list = [...groups.values()].map(round).sort((a, b) =>
+  const list = [...groups.values()].sort((a, b) =>
     (a.day || '').localeCompare(b.day || '') || a.provider.localeCompare(b.provider) || a.model.localeCompare(b.model));
-  return { groups: list, total: round(total) };
-}
-
-function cost(bucket) {
-  if (bucket.costUsd === null) return bucket.unpriced ? `unknown (${bucket.unpriced} unpriced)` : 'unknown';
-  const d = `$${bucket.costUsd.toFixed(2)}`;
-  return bucket.unpriced ? `≥ ${d} (${bucket.unpriced} unpriced)` : d;
+  return { groups: list, total };
 }
 
 export function renderReport({ groups, total, skipped = 0, since, byDay = false }) {
-  const head = [...(byDay ? ['day'] : []), 'provider', 'model', 'requests', 'in', 'out', 'cache read', 'cache write', 'est. cost'];
-  const rows = groups.map((g) => [...(byDay ? [g.day] : []), g.provider, g.model, String(g.requests), abbreviate(g.inputTokens), abbreviate(g.outputTokens), abbreviate(g.cacheReadTokens), abbreviate(g.cacheCreationTokens), cost(g)]);
-  rows.push([...(byDay ? [''] : []), 'total', '', String(total.requests), abbreviate(total.inputTokens), abbreviate(total.outputTokens), abbreviate(total.cacheReadTokens), abbreviate(total.cacheCreationTokens), cost(total)]);
+  const head = [...(byDay ? ['day'] : []), 'provider', 'model', 'requests', 'in', 'out', 'cache read', 'cache write'];
+  const rows = groups.map((g) => [...(byDay ? [g.day] : []), g.provider, g.model, String(g.requests), abbreviate(g.inputTokens), abbreviate(g.outputTokens), abbreviate(g.cacheReadTokens), abbreviate(g.cacheCreationTokens)]);
+  rows.push([...(byDay ? [''] : []), 'total', '', String(total.requests), abbreviate(total.inputTokens), abbreviate(total.outputTokens), abbreviate(total.cacheReadTokens), abbreviate(total.cacheCreationTokens)]);
   const widths = head.map((h, i) => Math.max(h.length, ...rows.map((r) => r[i].length)));
   const line = (cells) => cells.map((c, i) => c.padEnd(widths[i])).join('  ').trimEnd();
-  const out = [`usage since ${since} (estimates; local file only)`, line(head), ...rows.map(line)];
+  const out = [`usage since ${since} (local file only)`, line(head), ...rows.map(line)];
   if (skipped) out.push(`${skipped} malformed lines skipped`);
   return `${out.join('\n')}\n`;
 }

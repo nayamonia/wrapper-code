@@ -32,9 +32,9 @@ test('discoverModels normalizes /api/tags, sorts by name and flags tool support'
   assert.equal(calls[0].url, 'http://localhost:11434/api/tags');
   assert.equal(result.ok, true);
   assert.deepEqual(result.models, [
-    { name: 'ancient:1b', label: '', parameterSize: '1B', contextLength: null, tools: null, priceIn: null, priceOut: null, cacheReadPrice: null, cacheWritePrice: null },
-    { name: 'gemma3:4b', label: '', parameterSize: '4.3B', contextLength: 131072, tools: false, priceIn: null, priceOut: null, cacheReadPrice: null, cacheWritePrice: null },
-    { name: 'qwen3-code:14b', label: '', parameterSize: '14.8B', contextLength: 40960, tools: true, priceIn: null, priceOut: null, cacheReadPrice: null, cacheWritePrice: null },
+    { name: 'ancient:1b', label: '', parameterSize: '1B', contextLength: null, tools: null, priceIn: null, priceOut: null },
+    { name: 'gemma3:4b', label: '', parameterSize: '4.3B', contextLength: 131072, tools: false, priceIn: null, priceOut: null },
+    { name: 'qwen3-code:14b', label: '', parameterSize: '14.8B', contextLength: 40960, tools: true, priceIn: null, priceOut: null },
   ]);
 });
 
@@ -68,7 +68,7 @@ test('discoverModels skips non-object entries and entries with non-string names'
   const result = await discoverModels(ollama, 'http://localhost:11434', { fetchImpl });
   assert.equal(result.ok, true);
   assert.deepEqual(result.models, [
-    { name: 'ok', label: '', parameterSize: '', contextLength: null, tools: null, priceIn: null, priceOut: null, cacheReadPrice: null, cacheWritePrice: null },
+    { name: 'ok', label: '', parameterSize: '', contextLength: null, tools: null, priceIn: null, priceOut: null },
   ]);
 });
 
@@ -109,7 +109,7 @@ test('describeFetchError: a thrown non-Error never prints undefined', () => {
 
 const OPENROUTER = {
   data: [
-    { id: 'openai/gpt-6.1-sol', name: 'OpenAI: GPT-6.1 Sol', context_length: 1050000, pricing: { prompt: '0.000002', completion: '0.00001', input_cache_read: '0.0000002', input_cache_write: '0.0000025' }, supported_parameters: ['tools', 'temperature'] },
+    { id: 'openai/gpt-6.1-sol', name: 'OpenAI: GPT-6.1 Sol', context_length: 1050000, pricing: { prompt: '0.000002', completion: '0.00001' }, supported_parameters: ['tools', 'temperature'] },
     { id: 'openai/gpt-6.1-sol:batch', name: 'OpenAI: GPT-6.1 Sol (batch)', context_length: 1050000, pricing: { prompt: '0.000001', completion: '0.000005' }, supported_parameters: ['tools'] },
     { id: 'google/gemma-4-it', name: 'Google: Gemma 4', context_length: 131072, pricing: { prompt: '0', completion: '0' }, supported_parameters: ['temperature'] },
     { id: 'meta-llama/llama-5-scout', name: 'Meta: Llama 5 Scout', context_length: 1048576 },
@@ -128,9 +128,9 @@ test('discoverModels in openrouter format reads data[], maps id/name/context/pri
   assert.equal(calls[0].url, 'https://openrouter.ai/api/v1/models');
   assert.equal(result.ok, true);
   assert.deepEqual(result.models, [
-    { name: 'google/gemma-4-it', label: 'Google: Gemma 4', parameterSize: '', contextLength: 131072, tools: false, priceIn: 0, priceOut: 0, cacheReadPrice: null, cacheWritePrice: null },
-    { name: 'meta-llama/llama-5-scout', label: 'Meta: Llama 5 Scout', parameterSize: '', contextLength: 1048576, tools: null, priceIn: null, priceOut: null, cacheReadPrice: null, cacheWritePrice: null },
-    { name: 'openai/gpt-6.1-sol', label: 'OpenAI: GPT-6.1 Sol', parameterSize: '', contextLength: 1050000, tools: true, priceIn: 2, priceOut: 10, cacheReadPrice: 0.2, cacheWritePrice: 2.5 },
+    { name: 'google/gemma-4-it', label: 'Google: Gemma 4', parameterSize: '', contextLength: 131072, tools: false, priceIn: 0, priceOut: 0 },
+    { name: 'meta-llama/llama-5-scout', label: 'Meta: Llama 5 Scout', parameterSize: '', contextLength: 1048576, tools: null, priceIn: null, priceOut: null },
+    { name: 'openai/gpt-6.1-sol', label: 'OpenAI: GPT-6.1 Sol', parameterSize: '', contextLength: 1050000, tools: true, priceIn: 2, priceOut: 10 },
   ]);
 });
 
@@ -145,7 +145,7 @@ test('discoverModels in ollama format still returns the extended shape with empt
   const { fetchImpl } = fakeFetch(200, TAGS);
   const result = await discoverModels(ollama, 'http://localhost:11434', { fetchImpl });
   assert.equal(result.ok, true);
-  assert.deepEqual(result.models[2], { name: 'qwen3-code:14b', label: '', parameterSize: '14.8B', contextLength: 40960, tools: true, priceIn: null, priceOut: null, cacheReadPrice: null, cacheWritePrice: null });
+  assert.deepEqual(result.models[2], { name: 'qwen3-code:14b', label: '', parameterSize: '14.8B', contextLength: 40960, tools: true, priceIn: null, priceOut: null });
 });
 
 test('discoverModels in openrouter format treats negative sentinel prices (dynamic routers) as unknown', async () => {
@@ -153,11 +153,4 @@ test('discoverModels in openrouter format treats negative sentinel prices (dynam
   const result = await discoverModels(openrouterProvider, 'https://openrouter.ai/api', { fetchImpl });
   assert.equal(result.models[0].priceIn, null);
   assert.equal(result.models[0].priceOut, null);
-});
-
-test('discoverModels in openrouter format treats negative or non-numeric cache prices as unknown', async () => {
-  const { fetchImpl } = fakeFetch(200, { data: [{ id: 'x/y', name: 'X', pricing: { prompt: '0.000001', completion: '0.000002', input_cache_read: '-1', input_cache_write: 'abc' } }] });
-  const result = await discoverModels(openrouterProvider, 'https://openrouter.ai/api', { fetchImpl });
-  assert.equal(result.models[0].cacheReadPrice, null);
-  assert.equal(result.models[0].cacheWritePrice, null);
 });

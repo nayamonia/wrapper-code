@@ -81,9 +81,9 @@ Your global `~/.claude` (CLAUDE.md, skills, plugins, MCP servers, history) is sh
 - If a provider file is broken (for example a pasted bare key), `wrapper-code setup <provider>` replaces it with a fresh one.
 - Before `claude` starts, wrapper-code shows a sub-second 8-bit splash. It only appears on a color terminal at least 72 columns wide. Set `WRAPPER_CODE_NO_SPLASH=1` (or the standard `NO_COLOR`) to skip it.
 
-## Usage and cost
+## Token usage
 
-Every session records its token usage locally. When Claude Code exits, wrapper-code prints a short block with requests, tokens (input, output, cache read, cache write), duration and an estimated cost. The estimate comes from a per-model price table in the provider file (DeepSeek, Qwen Cloud) or from the prices saved at setup (OpenRouter: input, output and, when the model lists them, cache read and cache write); Ollama is free; models without a known price show `cost unknown`. The Alibaba Token Plan is prepaid, so it shows tokens only.
+Every session records its token usage locally. When Claude Code exits, wrapper-code prints a short block with the number of requests, the tokens (input, output, cache read, cache write) and how long the session ran. There is no cost estimate: prices change often and differ by plan, so check your provider's dashboard for what you actually paid.
 
 ```bash
 wrapper-code usage                 # last 30 days by provider and model
@@ -91,7 +91,7 @@ wrapper-code usage --since 7d --provider deepseek --by-day
 wrapper-code usage --since all --json
 ```
 
-How it works: the wrapper starts a tiny OpenTelemetry receiver on `127.0.0.1` for the session and points Claude Code's own telemetry export at it. Nothing leaves your machine; the data lives in `~/.config/wrapper-code/usage.jsonl`. Set `WRAPPER_CODE_NO_USAGE=1` to turn it off. If your shell already defines `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` or `CLAUDE_CODE_ENABLE_TELEMETRY`, wrapper-code keeps your settings and records nothing for that session. While it records, any `OTEL_EXPORTER_OTLP_LOGS_*` keys in a provider's `.env` are dropped so they cannot redirect the export. OTEL variables set in Claude Code's own settings file (the `env` block of `~/.claude/settings.json`) are not detected; if you export telemetry from there, set `WRAPPER_CODE_NO_USAGE=1`. To override prices for a provider, add `WRAPPER_CODE_PRICE_IN`, `WRAPPER_CODE_PRICE_OUT` and optionally `WRAPPER_CODE_PRICE_CACHE_READ` / `WRAPPER_CODE_PRICE_CACHE_WRITE` (USD per million tokens) to that provider's `.env`.
+How it works: the wrapper starts a tiny OpenTelemetry receiver on `127.0.0.1` for the session and points Claude Code's own telemetry export at it. The token counts are the ones Claude Code reports for each API request. Nothing leaves your machine; the data lives in `~/.config/wrapper-code/usage.jsonl` (model, tokens and duration per request; no prompts or responses). Set `WRAPPER_CODE_NO_USAGE=1` to turn it off. If your shell already defines `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` or `CLAUDE_CODE_ENABLE_TELEMETRY`, wrapper-code keeps your settings and records nothing for that session. While it records, any `OTEL_EXPORTER_OTLP_LOGS_*` variable in the session's environment is dropped so it cannot redirect the export. OTEL variables set in Claude Code's own settings file (the `env` block of `~/.claude/settings.json`) are not detected; if you export telemetry from there, set `WRAPPER_CODE_NO_USAGE=1`.
 
 ## Development
 
