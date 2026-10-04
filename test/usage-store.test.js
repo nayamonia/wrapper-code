@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, writeFile, stat, mkdir } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, stat, mkdir, chmod } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { usageFilePath, appendUsage, readUsage } from '../src/usage/store.js';
@@ -71,6 +71,7 @@ test('appendUsage fixes file permissions to 0600', async () => {
   const file = usageFilePath(o);
   await mkdir(path.dirname(file), { recursive: true });
   await writeFile(file, '{}');
+  await chmod(file, 0o644);
   const before = (await stat(file)).mode & 0o777;
   await appendUsage([EV()], o);
   const after = (await stat(file)).mode & 0o777;
