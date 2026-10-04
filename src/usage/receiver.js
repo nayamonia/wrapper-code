@@ -1,7 +1,7 @@
 import http from 'node:http';
 import { randomBytes } from 'node:crypto';
 
-const TOKEN_HEADER = 'x-wrapper-usage-token';
+export const TOKEN_HEADER = 'x-wrapper-usage-token';
 const MAX_BODY = 4 * 1024 * 1024;
 const COUNTERS = {
   input_tokens: 'inputTokens',

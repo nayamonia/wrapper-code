@@ -36,7 +36,7 @@ function costText(s) {
   return s.unpriced ? `estimated cost ≥ ${dollars} (${s.unpriced} unpriced)` : `estimated cost ${dollars}`;
 }
 
-export function summaryLines({ providerName, selection, events, startedAt, endedAt, file, malformed = 0, reason, truecolor }) {
+export function summaryLines({ providerName, selection, events, startedAt, endedAt, file, saved = true, malformed = 0, reason, truecolor }) {
   const head = `wrapper-code · ${providerName}${selection ? ` (${selection})` : ''} · ${duration(startedAt, endedAt)}`;
   const lines = [head];
   if (!events.length) {
@@ -46,7 +46,7 @@ export function summaryLines({ providerName, selection, events, startedAt, ended
   } else {
     const s = summarize(events);
     lines.push(`  requests ${s.requests} · in ${abbreviate(s.inputTokens)} · out ${abbreviate(s.outputTokens)} · cache read ${abbreviate(s.cacheReadTokens)} · cache write ${abbreviate(s.cacheCreationTokens)}`);
-    let last = `  ${costText(s)} · saved to ${file}`;
+    let last = `  ${costText(s)} · ${saved ? `saved to ${file}` : 'not saved'}`;
     if (malformed > 0) last += ` · ${malformed} malformed records ignored`;
     lines.push(last);
   }

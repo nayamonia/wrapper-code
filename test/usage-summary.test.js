@@ -50,3 +50,9 @@ test('summaryLines reports malformed count even when no events survive', () => {
   const lines = summaryLines({ ...base, events: [], malformed: 2 });
   assert.equal(lines[1], '  no usage captured (no api_request events arrived) · 2 malformed records ignored');
 });
+
+test('summaryLines says "not saved" instead of the file when the write failed', () => {
+  const lines = summaryLines({ ...base, events: [ev()], saved: false });
+  assert.equal(lines[2], '  estimated cost $0.01 · not saved');
+  assert.doesNotMatch(lines.join('\n'), /saved to/);
+});
