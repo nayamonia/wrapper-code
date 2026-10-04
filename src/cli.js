@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
+import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { loadCatalog } from './catalog.js';
 import { readProviderEnv, writeProviderEnv, envFilePath, ConfigError } from './config.js';
@@ -30,6 +31,14 @@ Config files live in ~/.config/wrapper-code (POSIX) or %APPDATA%\\wrapper-code (
 
 ${creditLine()}
 `;
+
+export function displayPath(file, homeDir) {
+  if (!homeDir) return file;
+  const base = homeDir.length > 1 ? homeDir.replace(/[\\/]+$/, '') : homeDir;
+  if (file === base) return '~';
+  const sep = file.startsWith(base + '/') ? '/' : file.startsWith(base + path.sep) ? path.sep : null;
+  return sep ? `~${file.slice(base.length)}` : file;
+}
 
 const INSTALL_HINT = 'claude not found on PATH. Install Claude Code: npm install -g @anthropic-ai/claude-code\n';
 
@@ -151,7 +160,7 @@ export async function main(argv, deps = {}) {
   const collected = [];
   if (env.WRAPPER_CODE_NO_USAGE === '1') {
     // Opted out: inject nothing, print nothing.
-  } else if (env.OTEL_EXPORTER_OTLP_ENDPOINT || env.CLAUDE_CODE_ENABLE_TELEMETRY) {
+  } else if (env.OTEL_EXPORTER_OTLP_ENDPOINT || env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT || env.CLAUDE_CODE_ENABLE_TELEMETRY) {
     stdout.write('usage: your OTEL settings are kept; wrapper-code will not record this session\n');
   } else {
     try {
@@ -163,6 +172,7 @@ export async function main(argv, deps = {}) {
           collected.push({ ts, sessionId, provider: provider.id, selection, ...raw, costUsd: estimateCost(raw, prices) });
         },
       });
+      for (const key of Object.keys(childEnv)) if (/^OTEL_EXPORTER_OTLP_LOGS_/.test(key)) delete childEnv[key];
       Object.assign(childEnv, receiver.env);
     } catch (err) {
       stdout.write(`usage: receiver could not start (${err.message}); session runs without usage tracking\n`);
@@ -177,15 +187,24 @@ export async function main(argv, deps = {}) {
   const endedAt = nowImpl();
 
   if (receiver) {
-    await receiver.close();
+    // A Ctrl+C or SIGTERM during the post-exit linger ends it early instead of killing us
+    // before the usage is written.
+    const endLinger = () => { receiver.close({ now: true }); };
+    process.on('SIGINT', endLinger);
+    process.on('SIGTERM', endLinger);
+    try {
+      await receiver.close();
+    } finally {
+      process.off('SIGINT', endLinger);
+      process.off('SIGTERM', endLinger);
+    }
     const file = usageFilePath(cfg);
     try {
       await appendUsage(collected, cfg);
     } catch (err) {
       stderr.write(`usage: could not write ${file}: ${err.message}\n`);
     }
-    const homeDir = home || homedir();
-    const shownFile = homeDir && file.startsWith(homeDir) ? `~${file.slice(homeDir.length)}` : file;
+    const shownFile = displayPath(file, home || homedir());
     const colored = shouldSplash({ stdout, env });
     stdout.write(renderSummary({
       providerName: provider.name, selection, events: collected, startedAt, endedAt, file: shownFile,

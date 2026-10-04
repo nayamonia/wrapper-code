@@ -119,3 +119,10 @@ test('a batch with invalid JSON is answered 400 and counted as neither event nor
   assert.equal(res.status, 400);
   assert.deepEqual(r.stats, { batches: 0, events: 0, malformed: 0, rejected: 0 });
 });
+
+test('close({ now: true }) ends the linger immediately', async () => {
+  const r = await start({ lingerMs: 60000 });
+  const started = Date.now();
+  await r.close({ now: true });
+  assert.ok(Date.now() - started < 2000);
+});

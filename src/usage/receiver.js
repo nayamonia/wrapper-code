@@ -132,16 +132,24 @@ export async function startUsageReceiver({ onEvent, lingerMs = 3000 } = {}) {
   const { port } = server.address();
 
   let closing = null;
-  const close = () => {
+  let finishNow = () => {};
+  const close = ({ now = false } = {}) => {
     if (!closing) {
       closing = new Promise((resolve) => {
-        const timer = setTimeout(() => {
+        let timer = null;
+        let done = false;
+        finishNow = () => {
+          if (done) return;
+          done = true;
+          clearTimeout(timer);
           server.closeAllConnections?.();
           server.close(() => resolve());
-        }, lingerMs);
+        };
+        timer = setTimeout(finishNow, lingerMs);
         timer.unref?.();
       });
     }
+    if (now) finishNow();
     return closing;
   };
 

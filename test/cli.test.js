@@ -5,7 +5,7 @@ import { mkdtemp, writeFile, mkdir, chmod, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { main, HELP, reportFatal } from '../src/cli.js';
+import { main, HELP, reportFatal, displayPath } from '../src/cli.js';
 import { writeProviderEnv, ConfigError } from '../src/config.js';
 import { readUsage } from '../src/usage/store.js';
 
@@ -605,4 +605,72 @@ fetch(process.env.OTEL_EXPORTER_OTLP_ENDPOINT + '/v1/logs', { method: 'POST', he
   assert.equal(events[0].selection, 'flash-1m');
   assert.ok(events[0].outputTokens > 0);
   assert.match(events[0].sessionId, /^[0-9a-f]{16}$/);
+});
+
+test('displayPath shortens only on a path boundary', () => {
+  assert.equal(displayPath('/home/al/.config/wrapper-code/usage.jsonl', '/home/al'), '~/.config/wrapper-code/usage.jsonl');
+  assert.equal(displayPath('/home/alice/.config/x/usage.jsonl', '/home/al'), '/home/alice/.config/x/usage.jsonl');
+  assert.equal(displayPath('/home/al/.config/usage.jsonl', '/home/al/'), '~/.config/usage.jsonl');
+});
+
+test('a SIGINT during the post-exit linger ends it early; usage is still summarized and the exit code kept', async () => {
+  const opts = await configuredDeepseek();
+  const before = [process.listenerCount('SIGINT'), process.listenerCount('SIGTERM')];
+  let release;
+  const fake = async ({ onEvent }) => ({
+    env: { CLAUDE_CODE_ENABLE_TELEMETRY: '1' },
+    stats: { malformed: 0 },
+    close: ({ now } = {}) => {
+      fake.calls.push(!!now);
+      if (now) release();
+      fake.pending ||= new Promise((r) => { release = r; });
+      return fake.pending;
+    },
+    onEvent,
+  });
+  fake.calls = [];
+  const stdout = sink();
+  const p = main(['deepseek'], {
+    stdout, stderr: sink(), ...opts,
+    startUsageReceiverImpl: fake,
+    resolveClaudeImpl: () => '/c',
+    launchImpl: async () => ({ code: 7 }),
+  });
+  const timer = setTimeout(() => { process.emit('SIGINT'); }, 100);
+  const guard = setTimeout(() => { release?.(); }, 3000);
+  try {
+    assert.equal(await p, 7);
+  } finally {
+    clearTimeout(timer);
+    clearTimeout(guard);
+  }
+  assert.deepEqual(fake.calls, [false, true]);
+  assert.match(stdout.text(), /no usage captured/);
+  assert.deepEqual([process.listenerCount('SIGINT'), process.listenerCount('SIGTERM')], before);
+});
+
+test('OTEL_EXPORTER_OTLP_LOGS_ENDPOINT in the shell env counts as the user\'s own OTEL setup', async () => {
+  const opts = await configuredDeepseek();
+  opts.env = { OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: 'http://collector:4318/v1/logs' };
+  const launched = [];
+  const stdout = sink();
+  await main(['deepseek'], { stdout, stderr: sink(), ...opts, resolveClaudeImpl: () => '/c', launchImpl: async (o) => { launched.push(o); return { code: 0 }; } });
+  assert.equal(launched[0].env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT, 'http://collector:4318/v1/logs');
+  assert.equal('OTEL_EXPORTER_OTLP_ENDPOINT' in launched[0].env, false);
+  assert.match(stdout.text(), /your OTEL settings are kept/);
+});
+
+test('provider .env OTEL_EXPORTER_OTLP_LOGS_* keys are removed from the child env when the receiver is injected', async () => {
+  const home = await tmp();
+  const opts = { platform: 'linux', env: { WRAPPER_CODE_USAGE_LINGER_MS: '1' }, home };
+  await writeProviderEnv('deepseek', {
+    ANTHROPIC_AUTH_TOKEN: 'sk', WRAPPER_CODE_PROFILE: 'flash-1m',
+    OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: 'http://elsewhere:4318', OTEL_EXPORTER_OTLP_LOGS_HEADERS: 'a=b',
+  }, opts);
+  const launched = [];
+  await main(['deepseek'], { stdout: sink(), stderr: sink(), ...opts, resolveClaudeImpl: () => '/c', launchImpl: async (o) => { launched.push(o); return { code: 0 }; } });
+  const env = launched[0].env;
+  assert.equal(Object.keys(env).some((k) => k.startsWith('OTEL_EXPORTER_OTLP_LOGS_')), false);
+  assert.match(env.OTEL_EXPORTER_OTLP_ENDPOINT, /^http:\/\/127\.0\.0\.1:\d+$/);
+  assert.equal(env.CLAUDE_CODE_ENABLE_TELEMETRY, '1');
 });
