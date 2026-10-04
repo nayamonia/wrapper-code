@@ -668,7 +668,7 @@ test('setup page reads the API error message from nested and top-level JSON bodi
 
 const OR_MODELS = {
   data: [
-    { id: 'openai/gpt-6.1-sol', name: 'OpenAI: GPT-6.1 Sol', context_length: 1050000, pricing: { prompt: '0.000002', completion: '0.00001' }, supported_parameters: ['tools'] },
+    { id: 'openai/gpt-6.1-sol', name: 'OpenAI: GPT-6.1 Sol', context_length: 1050000, pricing: { prompt: '0.000002', completion: '0.00001', input_cache_read: '0.0000002', input_cache_write: '0.0000025' }, supported_parameters: ['tools'] },
     { id: 'google/gemma-4-it', name: 'Google: Gemma 4', context_length: 131072, pricing: { prompt: '0', completion: '0' }, supported_parameters: ['temperature'] },
   ],
 };
@@ -729,6 +729,8 @@ test('openrouter: GET / shows the key field, discovers models without auth and c
   assert.equal(payload.discovery.models[1].label, 'OpenAI: GPT-6.1 Sol');
   assert.equal(payload.discovery.models[1].priceIn, 2);
   assert.equal(payload.discovery.models[1].priceOut, 10);
+  assert.equal(payload.discovery.models[1].cacheReadPrice, 0.2);
+  assert.equal(payload.discovery.models[1].cacheWritePrice, 2.5);
   assert.equal(payload.discovery.models[0].tools, false);
   assert.equal(api.seen.find((s) => s.url === '/v1/models').auth, null, 'discovery sends no key');
   await stop();
@@ -778,7 +780,26 @@ test('openrouter: re-running setup keeps a hand-written subagent model override'
   await stop();
 });
 
-const PRICED_CURRENT = { ANTHROPIC_AUTH_TOKEN: 'sk-or-good', WRAPPER_CODE_MODEL: 'openai/gpt-6.1-sol', WRAPPER_CODE_PRICE_IN: '2', WRAPPER_CODE_PRICE_OUT: '10' };
+const PRICED_CURRENT = { ANTHROPIC_AUTH_TOKEN: 'sk-or-good', WRAPPER_CODE_MODEL: 'openai/gpt-6.1-sol', WRAPPER_CODE_PRICE_IN: '2', WRAPPER_CODE_PRICE_OUT: '10', WRAPPER_CODE_PRICE_CACHE_READ: '0.2', WRAPPER_CODE_PRICE_CACHE_WRITE: '2.5' };
+
+test('openrouter: POST /save writes the cache prices as WRAPPER_CODE_PRICE_CACHE_READ/WRITE', async () => {
+  const { post, written, stop } = await bootOpenRouter();
+  const res = await post('/save', { credential: 'sk-or-good', model: 'openai/gpt-6.1-sol', priceIn: 2, priceOut: 10, priceCacheRead: 0.2, priceCacheWrite: 2.5 });
+  assert.equal(res.status, 200, await res.text());
+  assert.equal(written[0].WRAPPER_CODE_PRICE_CACHE_READ, '0.2');
+  assert.equal(written[0].WRAPPER_CODE_PRICE_CACHE_WRITE, '2.5');
+  await stop();
+});
+
+test('openrouter: switching to a priced model without cache prices removes the stale cache prices', async () => {
+  const { post, written, stop } = await bootOpenRouter({ current: PRICED_CURRENT });
+  const res = await post('/save', { credential: '', model: 'google/gemma-4-it', priceIn: 0, priceOut: 0, priceCacheRead: null });
+  assert.equal(res.status, 200, await res.text());
+  assert.equal(written[0].WRAPPER_CODE_PRICE_IN, '0');
+  assert.equal('WRAPPER_CODE_PRICE_CACHE_READ' in written[0], false);
+  assert.equal('WRAPPER_CODE_PRICE_CACHE_WRITE' in written[0], false);
+  await stop();
+});
 
 test("openrouter: POST /save writes the chosen model's prices as WRAPPER_CODE_PRICE_IN/OUT", async () => {
   const { post, written, stop } = await bootOpenRouter();
@@ -804,6 +825,8 @@ test("openrouter: changing to a model without prices removes the old model's pri
   assert.equal(res.status, 200, await res.text());
   assert.equal('WRAPPER_CODE_PRICE_IN' in written[0], false);
   assert.equal('WRAPPER_CODE_PRICE_OUT' in written[0], false);
+  assert.equal('WRAPPER_CODE_PRICE_CACHE_READ' in written[0], false);
+  assert.equal('WRAPPER_CODE_PRICE_CACHE_WRITE' in written[0], false);
   await stop();
 });
 
@@ -813,6 +836,8 @@ test('openrouter: re-saving the same model without prices keeps hand-written pri
   assert.equal(res.status, 200, await res.text());
   assert.equal(written[0].WRAPPER_CODE_PRICE_IN, '2');
   assert.equal(written[0].WRAPPER_CODE_PRICE_OUT, '10');
+  assert.equal(written[0].WRAPPER_CODE_PRICE_CACHE_READ, '0.2');
+  assert.equal(written[0].WRAPPER_CODE_PRICE_CACHE_WRITE, '2.5');
   await stop();
 });
 
@@ -831,4 +856,8 @@ test('setup page wires model prices into the save POST', async () => {
   assert.match(html, /data-price-out/);
   assert.ok(html.includes('priceIn: sel ? sel.priceIn : undefined'));
   assert.ok(html.includes('priceOut: sel ? sel.priceOut : undefined'));
+  assert.match(html, /data-price-cache-read/);
+  assert.match(html, /data-price-cache-write/);
+  assert.ok(html.includes('priceCacheRead: sel ? sel.priceCacheRead : undefined'));
+  assert.ok(html.includes('priceCacheWrite: sel ? sel.priceCacheWrite : undefined'));
 });

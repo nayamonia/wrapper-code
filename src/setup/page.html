@@ -199,6 +199,8 @@
       if (typeof m.priceIn === 'number' && typeof m.priceOut === 'number') {
         radio.setAttribute('data-price-in', String(m.priceIn));
         radio.setAttribute('data-price-out', String(m.priceOut));
+        if (typeof m.cacheReadPrice === 'number') radio.setAttribute('data-price-cache-read', String(m.cacheReadPrice));
+        if (typeof m.cacheWritePrice === 'number') radio.setAttribute('data-price-cache-write', String(m.cacheWritePrice));
       }
       radio.checked = (rendered ? m.name === prev : m.name === current.model) && !radio.disabled;
       radio.addEventListener('change', function () { $('otherModel').value = ''; renderAdvanced(); });
@@ -249,17 +251,21 @@
 
   function selectedModel() {
     var typed = $('otherModel').value.trim();
-    if (typed) return { name: typed, contextLength: null, priceIn: null, priceOut: null };
+    if (typed) return { name: typed, contextLength: null, priceIn: null, priceOut: null, priceCacheRead: null, priceCacheWrite: null };
     var el = document.querySelector('input[name=model]:checked');
-    if (!el) return { name: '', contextLength: null, priceIn: null, priceOut: null };
+    if (!el) return { name: '', contextLength: null, priceIn: null, priceOut: null, priceCacheRead: null, priceCacheWrite: null };
     var ctx = parseInt(el.getAttribute('data-context') || '', 10);
     var pin = parseFloat(el.getAttribute('data-price-in'));
     var pout = parseFloat(el.getAttribute('data-price-out'));
+    var pcr = parseFloat(el.getAttribute('data-price-cache-read'));
+    var pcw = parseFloat(el.getAttribute('data-price-cache-write'));
     return {
       name: el.value,
       contextLength: isNaN(ctx) ? null : ctx,
       priceIn: Number.isFinite(pin) ? pin : null,
       priceOut: Number.isFinite(pout) ? pout : null,
+      priceCacheRead: Number.isFinite(pcr) ? pcr : null,
+      priceCacheWrite: Number.isFinite(pcw) ? pcw : null,
     };
   }
 
@@ -349,6 +355,8 @@
       contextLength: sel ? sel.contextLength : undefined,
       priceIn: sel ? sel.priceIn : undefined,
       priceOut: sel ? sel.priceOut : undefined,
+      priceCacheRead: sel ? sel.priceCacheRead : undefined,
+      priceCacheWrite: sel ? sel.priceCacheWrite : undefined,
     })
       .then(function (res) {
         return res.text().then(function (text) {

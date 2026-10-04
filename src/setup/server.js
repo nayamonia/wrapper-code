@@ -223,13 +223,19 @@ export async function startSetupServer({
           const priceIn = body.priceIn;
           const priceOut = body.priceOut;
           const isPrice = (v) => typeof v === 'number' && Number.isFinite(v) && v >= 0;
+          const cachePrices = { WRAPPER_CODE_PRICE_CACHE_READ: body.priceCacheRead, WRAPPER_CODE_PRICE_CACHE_WRITE: body.priceCacheWrite };
           if (isPrice(priceIn) && isPrice(priceOut)) {
             values.WRAPPER_CODE_PRICE_IN = String(priceIn);
             values.WRAPPER_CODE_PRICE_OUT = String(priceOut);
+            for (const [key, v] of Object.entries(cachePrices)) {
+              if (isPrice(v)) values[key] = String(v);
+              else delete values[key];
+            }
           } else if (model !== current.WRAPPER_CODE_MODEL) {
             // Prices saved for the previous model would misprice the new one.
             delete values.WRAPPER_CODE_PRICE_IN;
             delete values.WRAPPER_CODE_PRICE_OUT;
+            for (const key of Object.keys(cachePrices)) delete values[key];
           }
         } else {
           const profile = String(body.profile || '');

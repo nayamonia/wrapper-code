@@ -28,6 +28,8 @@ function normalizeOllama(entry, requireCapability) {
     tools: caps ? caps.includes(requireCapability) : null,
     priceIn: null,
     priceOut: null,
+    cacheReadPrice: null,
+    cacheWritePrice: null,
   };
 }
 
@@ -43,6 +45,8 @@ function normalizeOpenRouter(entry, requireCapability) {
     tools: params ? params.includes(requireCapability) : null,
     priceIn: price(pricing.prompt),
     priceOut: price(pricing.completion),
+    cacheReadPrice: price(pricing.input_cache_read),
+    cacheWritePrice: price(pricing.input_cache_write),
   };
 }
 
