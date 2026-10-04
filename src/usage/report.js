@@ -47,7 +47,7 @@ export function aggregate(events, { since = 0, provider, byDay = false } = {}) {
 }
 
 function cost(bucket) {
-  if (bucket.costUsd === null) return 'unknown';
+  if (bucket.costUsd === null) return bucket.unpriced ? `unknown (${bucket.unpriced} unpriced)` : 'unknown';
   const d = `$${bucket.costUsd.toFixed(2)}`;
   return bucket.unpriced ? `≥ ${d} (${bucket.unpriced} unpriced)` : d;
 }

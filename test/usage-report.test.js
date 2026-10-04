@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseSince, aggregate, renderReport, runUsage } from '../src/usage/report.js';
-import { appendUsage } from '../src/usage/store.js';
+import { appendUsage, usageFilePath } from '../src/usage/store.js';
+import { appendFile } from 'node:fs/promises';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -11,6 +12,7 @@ const ev = (ts, provider, model, over = {}) => ({
   ts, sessionId: 's', provider, selection: 'x', model, querySource: 'main',
   inputTokens: 1000, outputTokens: 100, cacheReadTokens: 0, cacheCreationTokens: 0, durationMs: 10, costUsd: 0.001, ...over,
 });
+const EV_ONE = ev('2026-10-03T11:00:00Z', 'deepseek', 'deepseek-flash');
 const EVENTS = [
   ev('2026-10-03T11:00:00Z', 'deepseek', 'deepseek-flash'),
   ev('2026-10-03T11:30:00Z', 'deepseek', 'deepseek-flash', { outputTokens: 300 }),
@@ -61,7 +63,7 @@ test('renderReport prints a table with a total row and the skipped-lines footer'
   const text = renderReport({ ...r, skipped: 2, since: 'all' });
   assert.match(text, /provider\s+model\s+requests\s+in\s+out\s+cache read\s+cache write\s+est\. cost/);
   assert.match(text, /deepseek\s+deepseek-flash\s+2\s+2\.0k\s+400\s+0\s+0\s+\$0\.00/);
-  assert.match(text, /qwencloud\s+auto\s+1\s+1\.0k\s+100\s+0\s+0\s+unknown/);
+  assert.match(text, /qwencloud\s+auto\s+1\s+1\.0k\s+100\s+0\s+0\s+unknown \(1 unpriced\)/);
   assert.match(text, /total\s+5\s+.*≥ \$0\.50 \(1 unpriced\)/);
   assert.match(text, /2 malformed lines skipped/);
 });
@@ -83,4 +85,22 @@ test('runUsage reads the store, applies flags and supports --json; empty store s
   const err = out();
   assert.equal(await runUsage(['--since', 'yesterday'], { cfg, stdout: out(), stderr: err, now: NOW }), 1);
   assert.match(err.text(), /usage: --since expects 24h, 7d, 30d or all/);
+});
+
+test('renderReport says how many events were unpriced when none is priced', () => {
+  const r = aggregate([ev('2026-10-03T11:00:00Z', 'qwencloud', 'auto', { costUsd: null }), ev('2026-10-03T11:10:00Z', 'qwencloud', 'auto', { costUsd: null })], { since: 0 });
+  const lines = renderReport({ ...r, skipped: 0, since: 'all' }).trimEnd().split('\n');
+  assert.match(lines.at(-1), /total\s+2\s.*unknown \(2 unpriced\)$/);
+  assert.match(lines.at(-2), /unknown \(2 unpriced\)$/);
+});
+
+test('runUsage survives a corrupt-but-valid-JSON line and counts it in the footer', async () => {
+  const home = await mkdtemp(path.join(tmpdir(), 'wc-report-'));
+  const cfg = { platform: 'linux', env: {}, home };
+  await appendUsage([EV_ONE], cfg);
+  await appendFile(usageFilePath(cfg), `${JSON.stringify({ ts: '2026-10-03T11:00:00Z', provider: 'x', inputTokens: 1 })}\n`);
+  const c = []; const stdout = { write: (s) => { c.push(String(s)); return true; } };
+  assert.equal(await runUsage(['--since', 'all'], { cfg, stdout, stderr: stdout, now: NOW }), 0);
+  assert.match(c.join(''), /deepseek-flash/);
+  assert.match(c.join(''), /1 malformed lines skipped/);
 });

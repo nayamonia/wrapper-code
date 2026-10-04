@@ -38,7 +38,7 @@ export async function appendUsage(events, opts) {
 }
 
 function isUsageEvent(e) {
-  return e && typeof e === 'object' && typeof e.ts === 'string' && typeof e.provider === 'string' && typeof e.inputTokens === 'number';
+  return e && typeof e === 'object' && typeof e.ts === 'string' && typeof e.provider === 'string' && typeof e.model === 'string' && Number.isFinite(Date.parse(e.ts)) && typeof e.inputTokens === 'number';
 }
 
 export async function readUsage(opts) {

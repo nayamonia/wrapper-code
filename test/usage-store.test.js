@@ -77,3 +77,13 @@ test('appendUsage fixes file permissions to 0600', async () => {
   assert.equal(before, 0o644, 'file started with default permissions');
   assert.equal(after, 0o600, 'appendUsage fixed permissions');
 });
+
+test('readUsage skips valid-JSON lines without a string model or with an unparseable ts', async () => {
+  const o = await opts();
+  await appendUsage([EV()], o);
+  const { model, ...noModel } = EV();
+  await writeFile(usageFilePath(o), `${JSON.stringify(EV())}\n${JSON.stringify(noModel)}\n${JSON.stringify(EV({ ts: 'not a date' }))}\n`);
+  const { events, skipped } = await readUsage(o);
+  assert.equal(events.length, 1);
+  assert.equal(skipped, 2);
+});
