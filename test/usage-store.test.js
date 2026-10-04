@@ -52,3 +52,28 @@ test('appendUsage with no events writes nothing and creates no file', async () =
   await appendUsage([], o);
   assert.deepEqual(await readUsage(o), { events: [], skipped: 0 });
 });
+
+test('appendUsage recovers from truncated lines by prepending newline', async () => {
+  const o = await opts();
+  const file = usageFilePath(o);
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, `${JSON.stringify(EV({ model: 'm1' })).slice(0, 30)}`);
+  await appendUsage([EV({ model: 'm2' })], o);
+  const { events, skipped } = await readUsage(o);
+  assert.equal(events.length, 1);
+  assert.equal(events[0].model, 'm2');
+  assert.equal(skipped, 1);
+});
+
+test('appendUsage fixes file permissions to 0600', async () => {
+  if (process.platform === 'win32') return;
+  const o = await opts();
+  const file = usageFilePath(o);
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, '{}');
+  const before = (await stat(file)).mode & 0o777;
+  await appendUsage([EV()], o);
+  const after = (await stat(file)).mode & 0o777;
+  assert.equal(before, 0o644, 'file started with default permissions');
+  assert.equal(after, 0o600, 'appendUsage fixed permissions');
+});
