@@ -65,7 +65,7 @@ export function renderSite({ catalog, version }) {
   .install .p { color: var(--muted); }
   .chips { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin: 22px 0 0; }
   .chip { border: 1px solid var(--cyan); color: var(--cyan); padding: 3px 10px; font: 600 12px/1.6 ui-monospace, Menlo, Consolas, monospace; letter-spacing: .08em; }
-  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 40px 0; }
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin: 40px 0; }
   .box { background: var(--card); border: 1px solid var(--line); padding: 16px; }
   .box h3 { margin: 0 0 6px; color: var(--yellow); font-size: 15px; }
   .box p { margin: 0; color: #c9c9d6; font-size: 14px; }
@@ -104,6 +104,7 @@ export function renderSite({ catalog, version }) {
     <div class="box"><h3>Isolated</h3><p>Only environment variables change, and only for that process. <code>claude</code> on its own keeps using Anthropic.</p></div>
     <div class="box"><h3>Side by side</h3><p>Run several Claude Code sessions at the same time on one computer, each with a different LLM: <code>wrapper-code deepseek</code> in one terminal, <code>wrapper-code qwencloud</code> in another, plain <code>claude</code> in a third.</p></div>
     <div class="box"><h3>Setup in the browser</h3><p>The first launch opens a local page: paste the key, pick a model profile, and the key is tested before anything is saved.</p></div>
+    <div class="box"><h3>Token usage</h3><p>Every session records its requests and tokens locally and prints a short summary when Claude Code exits. <code>wrapper-code usage</code> adds them up by provider, model and day. Nothing leaves your machine.</p></div>
   </section>
 
   <section id="providers">
