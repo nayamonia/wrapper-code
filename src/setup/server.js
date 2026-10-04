@@ -220,6 +220,17 @@ export async function startSetupServer({
           } else {
             delete values.CLAUDE_CODE_AUTO_COMPACT_WINDOW;
           }
+          const priceIn = body.priceIn;
+          const priceOut = body.priceOut;
+          const isPrice = (v) => typeof v === 'number' && Number.isFinite(v) && v >= 0;
+          if (isPrice(priceIn) && isPrice(priceOut)) {
+            values.WRAPPER_CODE_PRICE_IN = String(priceIn);
+            values.WRAPPER_CODE_PRICE_OUT = String(priceOut);
+          } else if (model !== current.WRAPPER_CODE_MODEL) {
+            // Prices saved for the previous model would misprice the new one.
+            delete values.WRAPPER_CODE_PRICE_IN;
+            delete values.WRAPPER_CODE_PRICE_OUT;
+          }
         } else {
           const profile = String(body.profile || '');
           if (!Object.hasOwn(provider.profiles, profile)) {

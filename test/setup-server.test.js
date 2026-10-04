@@ -777,3 +777,58 @@ test('openrouter: re-running setup keeps a hand-written subagent model override'
   assert.equal(written[0].CLAUDE_CODE_SUBAGENT_MODEL, 'google/gemma-4-it');
   await stop();
 });
+
+const PRICED_CURRENT = { ANTHROPIC_AUTH_TOKEN: 'sk-or-good', WRAPPER_CODE_MODEL: 'openai/gpt-6.1-sol', WRAPPER_CODE_PRICE_IN: '2', WRAPPER_CODE_PRICE_OUT: '10' };
+
+test("openrouter: POST /save writes the chosen model's prices as WRAPPER_CODE_PRICE_IN/OUT", async () => {
+  const { post, written, stop } = await bootOpenRouter();
+  const res = await post('/save', { credential: 'sk-or-good', model: 'openai/gpt-6.1-sol', contextLength: 1050000, priceIn: 2, priceOut: 10 });
+  assert.equal(res.status, 200, await res.text());
+  assert.equal(written[0].WRAPPER_CODE_PRICE_IN, '2');
+  assert.equal(written[0].WRAPPER_CODE_PRICE_OUT, '10');
+  await stop();
+});
+
+test('openrouter: free model prices are saved as 0', async () => {
+  const { post, written, stop } = await bootOpenRouter();
+  const res = await post('/save', { credential: 'sk-or-good', model: 'google/gemma-4-it', priceIn: 0, priceOut: 0 });
+  assert.equal(res.status, 200, await res.text());
+  assert.equal(written[0].WRAPPER_CODE_PRICE_IN, '0');
+  assert.equal(written[0].WRAPPER_CODE_PRICE_OUT, '0');
+  await stop();
+});
+
+test("openrouter: changing to a model without prices removes the old model's prices", async () => {
+  const { post, written, stop } = await bootOpenRouter({ current: PRICED_CURRENT });
+  const res = await post('/save', { credential: '', model: 'some/typed-model', priceIn: null, priceOut: null });
+  assert.equal(res.status, 200, await res.text());
+  assert.equal('WRAPPER_CODE_PRICE_IN' in written[0], false);
+  assert.equal('WRAPPER_CODE_PRICE_OUT' in written[0], false);
+  await stop();
+});
+
+test('openrouter: re-saving the same model without prices keeps hand-written prices', async () => {
+  const { post, written, stop } = await bootOpenRouter({ current: PRICED_CURRENT });
+  const res = await post('/save', { credential: '', model: 'openai/gpt-6.1-sol', contextLength: 1050000 });
+  assert.equal(res.status, 200, await res.text());
+  assert.equal(written[0].WRAPPER_CODE_PRICE_IN, '2');
+  assert.equal(written[0].WRAPPER_CODE_PRICE_OUT, '10');
+  await stop();
+});
+
+test('openrouter: invalid prices (negative, string, NaN-like) are not written', async () => {
+  const { post, written, stop } = await bootOpenRouter();
+  const res = await post('/save', { credential: 'sk-or-good', model: 'some/typed-model', priceIn: -1, priceOut: '3' });
+  assert.equal(res.status, 200, await res.text());
+  assert.equal('WRAPPER_CODE_PRICE_IN' in written[0], false);
+  assert.equal('WRAPPER_CODE_PRICE_OUT' in written[0], false);
+  await stop();
+});
+
+test('setup page wires model prices into the save POST', async () => {
+  const html = await readFile(new URL('../src/setup/page.html', import.meta.url), 'utf8');
+  assert.match(html, /data-price-in/);
+  assert.match(html, /data-price-out/);
+  assert.ok(html.includes('priceIn: sel ? sel.priceIn : undefined'));
+  assert.ok(html.includes('priceOut: sel ? sel.priceOut : undefined'));
+});
