@@ -1,4 +1,6 @@
 import { createRequire } from 'node:module';
+import { homedir } from 'node:os';
+import { randomBytes } from 'node:crypto';
 import { loadCatalog } from './catalog.js';
 import { readProviderEnv, writeProviderEnv, envFilePath, ConfigError } from './config.js';
 import { buildEnv, isConfigured } from './env.js';
@@ -6,7 +8,12 @@ import { resolveClaude, launchClaude } from './launch.js';
 import { openBrowser } from './open.js';
 import { startSetupServer } from './setup/server.js';
 import { creditLine } from './credits.js';
-import { showSplash } from './splash.js';
+import { showSplash, shouldSplash } from './splash.js';
+import { startUsageReceiver } from './usage/receiver.js';
+import { resolvePrices, estimateCost } from './usage/pricing.js';
+import { appendUsage, usageFilePath } from './usage/store.js';
+import { renderSummary } from './usage/summary.js';
+import { supportsTruecolor } from './brand.js';
 
 const pkg = createRequire(import.meta.url)('../package.json');
 
@@ -64,6 +71,8 @@ export async function main(argv, deps = {}) {
     startSetupServerImpl = startSetupServer,
     catalogImpl = loadCatalog,
     sleepImpl,
+    startUsageReceiverImpl = startUsageReceiver,
+    nowImpl = Date.now,
   } = deps;
   const cfg = { platform, env, ...(home ? { home } : {}) };
   const setupDeps = { cfg, stdout, stderr, openBrowserImpl, startSetupServerImpl };
@@ -135,8 +144,53 @@ export async function main(argv, deps = {}) {
     return 1;
   }
   const selection = provider.models ? values.WRAPPER_CODE_MODEL : (values.WRAPPER_CODE_PROFILE || provider.defaultProfile);
+
+  // Usage telemetry: a local OTLP receiver for this session.
+  let receiver = null;
+  const sessionId = randomBytes(8).toString('hex');
+  const collected = [];
+  if (env.WRAPPER_CODE_NO_USAGE === '1') {
+    // Opted out: inject nothing, print nothing.
+  } else if (env.OTEL_EXPORTER_OTLP_ENDPOINT || env.CLAUDE_CODE_ENABLE_TELEMETRY) {
+    stdout.write('usage: your OTEL settings are kept; wrapper-code will not record this session\n');
+  } else {
+    try {
+      const lingerMs = Number(env.WRAPPER_CODE_USAGE_LINGER_MS) || 3000;
+      receiver = await startUsageReceiverImpl({
+        lingerMs,
+        onEvent: (raw, ts) => {
+          const prices = resolvePrices({ provider, fileValues: values, model: raw.model });
+          collected.push({ ts, sessionId, provider: provider.id, selection, ...raw, costUsd: estimateCost(raw, prices) });
+        },
+      });
+      Object.assign(childEnv, receiver.env);
+    } catch (err) {
+      stdout.write(`usage: receiver could not start (${err.message}); session runs without usage tracking\n`);
+    }
+  }
+  delete childEnv.WRAPPER_CODE_USAGE_LINGER_MS;
+
   await showSplash({ stdout, env, version: pkg.version, providerName: provider.name, selection, ...(sleepImpl ? { sleep: sleepImpl } : {}) });
+  const startedAt = nowImpl();
   const { code, error } = await launchImpl({ claudePath, args: rest, env: childEnv });
   if (error) stderr.write(`Failed to start claude: ${error.message}\n`);
+  const endedAt = nowImpl();
+
+  if (receiver) {
+    await receiver.close();
+    const file = usageFilePath(cfg);
+    try {
+      await appendUsage(collected, cfg);
+    } catch (err) {
+      stderr.write(`usage: could not write ${file}: ${err.message}\n`);
+    }
+    const homeDir = home || homedir();
+    const shownFile = homeDir && file.startsWith(homeDir) ? `~${file.slice(homeDir.length)}` : file;
+    const colored = shouldSplash({ stdout, env });
+    stdout.write(renderSummary({
+      providerName: provider.name, selection, events: collected, startedAt, endedAt, file: shownFile,
+      malformed: receiver.stats.malformed, truecolor: colored ? supportsTruecolor(env) : undefined,
+    }));
+  }
   return code;
 }

@@ -7,6 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { main, HELP, reportFatal } from '../src/cli.js';
 import { writeProviderEnv, ConfigError } from '../src/config.js';
+import { readUsage } from '../src/usage/store.js';
 
 const BIN = fileURLToPath(new URL('../bin/wrapper-code.js', import.meta.url));
 const isWin = process.platform === 'win32';
@@ -92,7 +93,7 @@ test('launch without a credential runs setup; cancelled setup exits 1 without la
 
 test('launch without a credential runs setup, then launches in the same invocation when saved', async () => {
   const home = await tmp();
-  const opts = { platform: 'linux', env: { PATH: '/x' }, home };
+  const opts = { platform: 'linux', env: { PATH: '/x', WRAPPER_CODE_NO_USAGE: '1' }, home };
   const launched = [];
   const stdout = sink();
   const code = await main(['deepseek', '--resume'], {
@@ -142,7 +143,7 @@ test('setup <provider> exits 0 when saved and 1 when cancelled', async () => {
 
 test('provider ids are matched case-insensitively', async () => {
   const home = await tmp();
-  const opts = { platform: 'linux', env: {}, home };
+  const opts = { platform: 'linux', env: { WRAPPER_CODE_NO_USAGE: '1' }, home };
   await writeProviderEnv('deepseek', { ANTHROPIC_AUTH_TOKEN: 'sk' }, opts);
   const code = await main(['DeepSeek'], { stdout: sink(), stderr: sink(), ...opts, resolveClaudeImpl: () => '/c', launchImpl: async () => ({ code: 0 }) });
   assert.equal(code, 0);
@@ -162,6 +163,7 @@ process.exit(7);
   await writeProviderEnv('deepseek', { ANTHROPIC_AUTH_TOKEN: 'sk-e2e', WRAPPER_CODE_PROFILE: 'flash-1m' }, { platform: 'linux', env: {}, home });
   const env = {
     ...process.env,
+    WRAPPER_CODE_NO_USAGE: '1',
     HOME: home,
     XDG_CONFIG_HOME: path.join(home, '.config'),
     PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
@@ -270,7 +272,7 @@ test('ollama: launch with a base URL but no model opens setup instead of crashin
 
 test('ollama: the launch banner names the model', async () => {
   const home = await tmp();
-  const opts = { platform: 'linux', env: {}, home };
+  const opts = { platform: 'linux', env: { WRAPPER_CODE_NO_USAGE: '1' }, home };
   await writeProviderEnv('ollama', { WRAPPER_CODE_MODEL: 'qwen3-code:14b' }, opts);
   const stdout = sink();
   await main(['ollama'], { stdout, stderr: sink(), ...opts, resolveClaudeImpl: () => '/c', launchImpl: async () => ({ code: 0 }) });
@@ -291,6 +293,7 @@ process.exit(0);
   await writeProviderEnv('ollama', { WRAPPER_CODE_MODEL: 'gemma3', ANTHROPIC_BASE_URL: 'http://10.0.0.5:11434', CLAUDE_CODE_AUTO_COMPACT_WINDOW: '131072' }, { platform: 'linux', env: {}, home });
   const env = {
     ...process.env,
+    WRAPPER_CODE_NO_USAGE: '1',
     HOME: home,
     XDG_CONFIG_HOME: path.join(home, '.config'),
     PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
@@ -320,7 +323,7 @@ test('list shows ollama alongside deepseek', async () => {
 
 test('launch on a color TTY shows the 8-bit splash instead of the one-line banner', async () => {
   const home = await tmp();
-  const opts = { platform: 'linux', env: { COLORTERM: 'truecolor', TERM: 'xterm-256color' }, home };
+  const opts = { platform: 'linux', env: { COLORTERM: 'truecolor', TERM: 'xterm-256color', WRAPPER_CODE_NO_USAGE: '1' }, home };
   await writeProviderEnv('deepseek', { ANTHROPIC_AUTH_TOKEN: 'sk', WRAPPER_CODE_PROFILE: 'v4-pro' }, opts);
   const chunks = [];
   const stdout = { isTTY: true, columns: 120, write: (s) => { chunks.push(String(s)); return true; } };
@@ -372,6 +375,7 @@ process.exit(0);
   await writeProviderEnv('qwencloud', { ANTHROPIC_AUTH_TOKEN: 'sk-qc-e2e', WRAPPER_CODE_PROFILE: 'pay-as-you-go' }, { platform: 'linux', env: {}, home });
   const env = {
     ...process.env,
+    WRAPPER_CODE_NO_USAGE: '1',
     HOME: home,
     XDG_CONFIG_HOME: path.join(home, '.config'),
     PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
@@ -408,6 +412,7 @@ process.exit(0);
   await writeProviderEnv('alibaba', { ANTHROPIC_AUTH_TOKEN: 'tp-e2e', WRAPPER_CODE_PROFILE: 'deepseek-pro' }, { platform: 'linux', env: {}, home });
   const env = {
     ...process.env,
+    WRAPPER_CODE_NO_USAGE: '1',
     HOME: home,
     XDG_CONFIG_HOME: path.join(home, '.config'),
     PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
@@ -433,7 +438,7 @@ test('the retired ids qwen and alibaba-token are unknown and the message lists t
 
 test('stale qwen.env and alibaba-token.env files are ignored by list and by other launches', async () => {
   const home = await tmp();
-  const opts = { platform: 'linux', env: {}, home };
+  const opts = { platform: 'linux', env: { WRAPPER_CODE_NO_USAGE: '1' }, home };
   await writeProviderEnv('qwen', { ANTHROPIC_AUTH_TOKEN: 'old-cp' }, opts);
   await writeProviderEnv('alibaba-token', { ANTHROPIC_AUTH_TOKEN: 'old-tp' }, opts);
   await writeProviderEnv('deepseek', { ANTHROPIC_AUTH_TOKEN: 'sk' }, opts);
@@ -483,6 +488,7 @@ process.exit(0);
   await writeProviderEnv('openrouter', { ANTHROPIC_AUTH_TOKEN: 'sk-or-e2e', WRAPPER_CODE_MODEL: 'openai/gpt-6.1-sol', CLAUDE_CODE_AUTO_COMPACT_WINDOW: '1050000' }, { platform: 'linux', env: {}, home });
   const env = {
     ...process.env,
+    WRAPPER_CODE_NO_USAGE: '1',
     HOME: home,
     XDG_CONFIG_HOME: path.join(home, '.config'),
     PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
@@ -501,4 +507,102 @@ process.exit(0);
   assert.equal(seen.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW, '1050000');
   assert.equal('ANTHROPIC_API_KEY' in seen.env, false);
   assert.equal('WRAPPER_CODE_MODEL' in seen.env, false);
+});
+
+const FIXTURE_PATH = fileURLToPath(new URL('./fixtures/otlp-api-request.json', import.meta.url));
+
+async function configuredDeepseek() {
+  const home = await tmp();
+  const opts = { platform: 'linux', env: {}, home };
+  await writeProviderEnv('deepseek', { ANTHROPIC_AUTH_TOKEN: 'sk', WRAPPER_CODE_PROFILE: 'flash-1m' }, opts);
+  return opts;
+}
+
+test('launch injects the seven OTEL variables of the usage receiver into the child env', async () => {
+  const opts = await configuredDeepseek();
+  opts.env = { WRAPPER_CODE_USAGE_LINGER_MS: '1' };
+  const launched = [];
+  const stdout = sink();
+  const code = await main(['deepseek'], {
+    stdout, stderr: sink(), ...opts,
+    resolveClaudeImpl: () => '/c',
+    launchImpl: async (o) => { launched.push(o); return { code: 0 }; },
+  });
+  assert.equal(code, 0);
+  const env = launched[0].env;
+  assert.equal(env.CLAUDE_CODE_ENABLE_TELEMETRY, '1');
+  assert.equal(env.OTEL_LOGS_EXPORTER, 'otlp');
+  assert.equal(env.OTEL_METRICS_EXPORTER, 'none');
+  assert.equal(env.OTEL_EXPORTER_OTLP_PROTOCOL, 'http/json');
+  assert.match(env.OTEL_EXPORTER_OTLP_ENDPOINT, /^http:\/\/127\.0\.0\.1:\d+$/);
+  assert.match(env.OTEL_EXPORTER_OTLP_HEADERS, /^x-wrapper-usage-token=[0-9a-f]{64}$/);
+  assert.equal(env.OTEL_LOGS_EXPORT_INTERVAL, '2000');
+  assert.match(stdout.text(), /no usage captured \(no api_request events arrived\)/);
+});
+
+test('WRAPPER_CODE_NO_USAGE=1 injects nothing and prints no summary', async () => {
+  const opts = await configuredDeepseek();
+  opts.env = { WRAPPER_CODE_NO_USAGE: '1' };
+  const launched = [];
+  const stdout = sink();
+  await main(['deepseek'], { stdout, stderr: sink(), ...opts, resolveClaudeImpl: () => '/c', launchImpl: async (o) => { launched.push(o); return { code: 0 }; } });
+  assert.equal('CLAUDE_CODE_ENABLE_TELEMETRY' in launched[0].env, false);
+  assert.equal('OTEL_EXPORTER_OTLP_ENDPOINT' in launched[0].env, false);
+  assert.doesNotMatch(stdout.text(), /usage/);
+});
+
+test("the user's own OTEL endpoint is kept, with a one-line notice and no capture", async () => {
+  const opts = await configuredDeepseek();
+  opts.env = { OTEL_EXPORTER_OTLP_ENDPOINT: 'http://collector:4318', CLAUDE_CODE_ENABLE_TELEMETRY: '1' };
+  const launched = [];
+  const stdout = sink();
+  await main(['deepseek'], { stdout, stderr: sink(), ...opts, resolveClaudeImpl: () => '/c', launchImpl: async (o) => { launched.push(o); return { code: 0 }; } });
+  assert.equal(launched[0].env.OTEL_EXPORTER_OTLP_ENDPOINT, 'http://collector:4318');
+  assert.equal('OTEL_EXPORTER_OTLP_HEADERS' in launched[0].env, false);
+  assert.match(stdout.text(), /usage: your OTEL settings are kept; wrapper-code will not record this session/);
+  assert.doesNotMatch(stdout.text(), /no usage captured/);
+});
+
+test('a receiver that fails to start is reported once and the session still launches', async () => {
+  const opts = await configuredDeepseek();
+  const launched = [];
+  const stdout = sink();
+  const code = await main(['deepseek'], {
+    stdout, stderr: sink(), ...opts,
+    startUsageReceiverImpl: async () => { throw new Error('EADDRINUSE'); },
+    resolveClaudeImpl: () => '/c',
+    launchImpl: async (o) => { launched.push(o); return { code: 4 }; },
+  });
+  assert.equal(code, 4);
+  assert.equal('OTEL_EXPORTER_OTLP_ENDPOINT' in launched[0].env, false);
+  assert.match(stdout.text(), /usage: receiver could not start \(EADDRINUSE\); session runs without usage tracking/);
+});
+
+test('end-to-end: a fake claude posts the fixture to the receiver; the summary is printed, the line stored, the exit code kept', { skip: isWin }, async () => {
+  const home = await tmp();
+  const binDir = path.join(home, 'fakebin');
+  await mkdir(binDir);
+  const fake = path.join(binDir, 'claude');
+  await writeFile(fake, `#!/usr/bin/env node
+const fs = require('fs');
+const body = fs.readFileSync(process.env.FIXTURE_PATH, 'utf8');
+const [name, token] = process.env.OTEL_EXPORTER_OTLP_HEADERS.split('=');
+fetch(process.env.OTEL_EXPORTER_OTLP_ENDPOINT + '/v1/logs', { method: 'POST', headers: { 'content-type': 'application/json', [name]: token }, body })
+  .then((r) => { if (r.status !== 200) throw new Error('receiver answered ' + r.status); process.exit(5); })
+  .catch((e) => { console.error(e.message); process.exit(99); });
+`);
+  await chmod(fake, 0o755);
+  const cfg = { platform: 'linux', env: {}, home };
+  await writeProviderEnv('deepseek', { ANTHROPIC_AUTH_TOKEN: 'sk-e2e', WRAPPER_CODE_PROFILE: 'flash-1m' }, cfg);
+  const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: path.join(home, '.config'), PATH: `${binDir}${path.delimiter}${process.env.PATH}`, FIXTURE_PATH, WRAPPER_CODE_USAGE_LINGER_MS: '200' };
+  const result = await run(['deepseek'], env);
+  assert.equal(result.code, 5, result.stderr);
+  assert.match(result.stdout, /requests 1 · in /);
+  assert.match(result.stdout, /saved to .*usage\.jsonl/);
+  const { events } = await readUsage(cfg);
+  assert.equal(events.length, 1);
+  assert.equal(events[0].provider, 'deepseek');
+  assert.equal(events[0].selection, 'flash-1m');
+  assert.ok(events[0].outputTokens > 0);
+  assert.match(events[0].sessionId, /^[0-9a-f]{16}$/);
 });
