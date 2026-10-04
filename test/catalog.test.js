@@ -236,3 +236,21 @@ test('ollama carries its empty-list hint in the catalog', async () => {
   const catalog = await loadCatalog();
   assert.match(catalog.get('ollama').models.emptyHint, /ollama pull/);
 });
+
+test('validateProvider checks pricing tables and freeOfCharge', () => {
+  const ok = { ...valid(), pricing: { m: { in: 1, out: 2 }, n: { in: 0.5, out: 1, cacheRead: 0.05, cacheWrite: 0.6 } } };
+  assert.doesNotThrow(() => validateProvider(ok));
+  assert.doesNotThrow(() => validateProvider({ ...valid(), freeOfCharge: true }));
+  assert.throws(() => validateProvider({ ...valid(), pricing: { m: { in: 1 } } }), /pricing\.m/);
+  assert.throws(() => validateProvider({ ...valid(), pricing: { m: { in: '1', out: 2 } } }), /pricing\.m/);
+  assert.throws(() => validateProvider({ ...valid(), pricing: 'cheap' }), /pricing must be an object/);
+  assert.throws(() => validateProvider({ ...valid(), freeOfCharge: 'yes' }), /freeOfCharge/);
+});
+
+test('deepseek and qwencloud carry dated pricing tables; ollama is free of charge', async () => {
+  const catalog = await loadCatalog();
+  assert.deepEqual(catalog.get('deepseek').pricing['deepseek-flash'], { in: 0.3, out: 1.2, cacheRead: 0.006 });
+  assert.deepEqual(catalog.get('qwencloud').pricing['qwen3.8-flash'], { in: 0.15, out: 0.47, cacheRead: 0.016 });
+  assert.equal(catalog.get('ollama').freeOfCharge, true);
+  assert.equal('pricing' in catalog.get('alibaba'), false);
+});

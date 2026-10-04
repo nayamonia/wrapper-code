@@ -23,5 +23,6 @@ export default {
     emptyHint: 'No models installed. Run: ollama pull qwen3-coder',
   },
   test: { method: 'GET', path: '/api/tags', auth: 'none' },
+  freeOfCharge: true,
   editableBaseUrl: true,
 };

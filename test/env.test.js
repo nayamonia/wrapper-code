@@ -117,3 +117,13 @@ test('isConfigured requires WRAPPER_CODE_MODEL for a models provider', () => {
   assert.equal(isConfigured(ollama, { WRAPPER_CODE_MODEL: '' }), false);
   assert.equal(isConfigured(ollama, { WRAPPER_CODE_MODEL: 'qwen3-code:14b' }), true);
 });
+
+test('buildEnv never passes WRAPPER_CODE_PRICE_* keys to the child', () => {
+  const env = buildEnv({
+    provider: deepseek,
+    fileValues: { ANTHROPIC_AUTH_TOKEN: 'sk', WRAPPER_CODE_PRICE_IN: '1', WRAPPER_CODE_PRICE_OUT: '2', WRAPPER_CODE_PRICE_CACHE_READ: '0.1', WRAPPER_CODE_PRICE_CACHE_WRITE: '1' },
+    baseEnv: {},
+  });
+  for (const key of Object.keys(env)) assert.doesNotMatch(key, /^WRAPPER_CODE_/);
+  assert.equal(env.ANTHROPIC_AUTH_TOKEN, 'sk');
+});

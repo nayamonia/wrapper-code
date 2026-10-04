@@ -37,5 +37,10 @@ export default {
   },
   defaultProfile: 'flash-1m',
   test: { method: 'GET', url: 'https://api.deepseek.com/models', auth: 'bearer' },
+  // USD per million tokens, peak rates (off-peak is half). Source: api-docs.deepseek.com/quick_start/pricing, 2026-10-03.
+  pricing: {
+    'deepseek-flash': { in: 0.3, out: 1.2, cacheRead: 0.006 },
+    'deepseek-v4-pro': { in: 1.32, out: 3.96, cacheRead: 0.044 },
+  },
   editableBaseUrl: false,
 };

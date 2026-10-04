@@ -34,5 +34,11 @@ export default {
     headers: { 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
     body: Object.freeze({ model: 'qwen3.6-flash', max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] }),
   },
+  // USD per million tokens. Source: qwencloud.com/pricing/api, 2026-10-03 (qwen3.6-flash: OpenRouter catalog, same day).
+  pricing: {
+    'qwen3.8-max': { in: 2, out: 6, cacheRead: 0.25 },
+    'qwen3.8-flash': { in: 0.15, out: 0.47, cacheRead: 0.016 },
+    'qwen3.6-flash': { in: 0.188, out: 1.125 },
+  },
   editableBaseUrl: false,
 };

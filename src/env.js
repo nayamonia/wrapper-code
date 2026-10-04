@@ -28,7 +28,10 @@ function selectionEnv(provider, fileValues) {
   return derivedEnv(provider, fileValues.WRAPPER_CODE_PROFILE || provider.defaultProfile);
 }
 
-const PRIVATE_KEYS = new Set(['WRAPPER_CODE_PROFILE', 'WRAPPER_CODE_MODEL']);
+const PRIVATE_KEYS = new Set([
+  'WRAPPER_CODE_PROFILE', 'WRAPPER_CODE_MODEL',
+  'WRAPPER_CODE_PRICE_IN', 'WRAPPER_CODE_PRICE_OUT', 'WRAPPER_CODE_PRICE_CACHE_READ', 'WRAPPER_CODE_PRICE_CACHE_WRITE',
+]);
 
 export function buildEnv({ provider, fileValues, baseEnv = process.env }) {
   const env = { ...baseEnv, ...selectionEnv(provider, fileValues) };
