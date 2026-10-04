@@ -28,18 +28,19 @@ function selectionEnv(provider, fileValues) {
   return derivedEnv(provider, fileValues.WRAPPER_CODE_PROFILE || provider.defaultProfile);
 }
 
-const PRIVATE_KEYS = new Set(['WRAPPER_CODE_PROFILE', 'WRAPPER_CODE_MODEL']);
+// Every WRAPPER_CODE_* key is the wrapper's own setting and never reaches the child.
+const isPrivate = (key) => key.startsWith('WRAPPER_CODE_');
 
 export function buildEnv({ provider, fileValues, baseEnv = process.env }) {
   const env = { ...baseEnv, ...selectionEnv(provider, fileValues) };
   for (const [key, value] of Object.entries(fileValues)) {
-    if (!PRIVATE_KEYS.has(key)) env[key] = value;
+    if (!isPrivate(key)) env[key] = value;
   }
   delete env.ANTHROPIC_API_KEY;
   // These make Claude Code ignore ANTHROPIC_BASE_URL and talk to another backend.
   delete env.CLAUDE_CODE_USE_BEDROCK;
   delete env.CLAUDE_CODE_USE_VERTEX;
   delete env.CLAUDE_CODE_USE_FOUNDRY;
-  for (const key of PRIVATE_KEYS) delete env[key];
+  for (const key of Object.keys(env)) if (isPrivate(key)) delete env[key];
   return env;
 }

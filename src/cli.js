@@ -1,4 +1,7 @@
 import { createRequire } from 'node:module';
+import { homedir } from 'node:os';
+import path from 'node:path';
+import { randomBytes } from 'node:crypto';
 import { loadCatalog } from './catalog.js';
 import { readProviderEnv, writeProviderEnv, envFilePath, ConfigError } from './config.js';
 import { buildEnv, isConfigured } from './env.js';
@@ -6,7 +9,12 @@ import { resolveClaude, launchClaude } from './launch.js';
 import { openBrowser } from './open.js';
 import { startSetupServer } from './setup/server.js';
 import { creditLine } from './credits.js';
-import { showSplash } from './splash.js';
+import { showSplash, shouldSplash } from './splash.js';
+import { runUsage } from './usage/report.js';
+import { startUsageReceiver, TOKEN_HEADER as USAGE_TOKEN_HEADER } from './usage/receiver.js';
+import { appendUsage, usageFilePath } from './usage/store.js';
+import { renderSummary } from './usage/summary.js';
+import { supportsTruecolor } from './brand.js';
 
 const pkg = createRequire(import.meta.url)('../package.json');
 
@@ -17,12 +25,22 @@ Usage:
   wrapper-code <provider> [claude args...]   Launch Claude Code with <provider> (opens setup first if needed)
   wrapper-code setup <provider>              Open the setup page to change the key or model profile
   wrapper-code list                          List providers and whether they are configured
+  wrapper-code usage [--since 24h|7d|30d|all] [--provider <id>] [--by-day] [--json]
+                                             Token usage per provider and model
   wrapper-code --help | --version
 
 Config files live in ~/.config/wrapper-code (POSIX) or %APPDATA%\\wrapper-code (Windows).
 
 ${creditLine()}
 `;
+
+export function displayPath(file, homeDir) {
+  if (!homeDir) return file;
+  const base = homeDir.length > 1 ? homeDir.replace(/[\\/]+$/, '') : homeDir;
+  if (file === base) return '~';
+  const sep = file.startsWith(base + '/') ? '/' : file.startsWith(base + path.sep) ? path.sep : null;
+  return sep ? `~${file.slice(base.length)}` : file;
+}
 
 const INSTALL_HINT = 'claude not found on PATH. Install Claude Code: npm install -g @anthropic-ai/claude-code\n';
 
@@ -51,6 +69,47 @@ export function reportFatal(err, stderr = process.stderr) {
   }
 }
 
+const INJECTED_OTEL_KEYS = [
+  'CLAUDE_CODE_ENABLE_TELEMETRY', 'OTEL_LOGS_EXPORTER', 'OTEL_METRICS_EXPORTER', 'OTEL_EXPORTER_OTLP_PROTOCOL',
+  'OTEL_EXPORTER_OTLP_ENDPOINT', 'OTEL_EXPORTER_OTLP_HEADERS', 'OTEL_LOGS_EXPORT_INTERVAL',
+];
+// Measured against the real Claude Code: the final batch arrives before the child exits,
+// so the linger only covers a straggler.
+const DEFAULT_LINGER_MS = 500;
+
+async function finishUsage({ receiver, failedToStart, collected, cfg, home, provider, selection, startedAt, endedAt, stdout, stderr, env }) {
+  if (failedToStart) {
+    // claude never ran: nothing will arrive, do not linger.
+    await receiver.close({ now: true });
+  } else {
+    // A Ctrl+C or SIGTERM during the post-exit linger ends it early instead of killing us
+    // before the usage is written.
+    const endLinger = () => { receiver.close({ now: true }); };
+    process.on('SIGINT', endLinger);
+    process.on('SIGTERM', endLinger);
+    try {
+      await receiver.close();
+    } finally {
+      process.off('SIGINT', endLinger);
+      process.off('SIGTERM', endLinger);
+    }
+  }
+  const file = usageFilePath(cfg);
+  let writeError = null;
+  try {
+    await appendUsage(collected, cfg);
+  } catch (err) {
+    writeError = err;
+  }
+  const colored = shouldSplash({ stdout, env });
+  stdout.write(renderSummary({
+    providerName: provider.name, selection, events: collected, startedAt, endedAt,
+    file: displayPath(file, home || homedir()), saved: !writeError,
+    malformed: receiver.stats.malformed, truecolor: colored ? supportsTruecolor(env) : undefined,
+  }));
+  if (writeError) stderr.write(`usage: could not write ${file}: ${writeError.message}\n`);
+}
+
 export async function main(argv, deps = {}) {
   const {
     stdout = process.stdout,
@@ -64,6 +123,8 @@ export async function main(argv, deps = {}) {
     startSetupServerImpl = startSetupServer,
     catalogImpl = loadCatalog,
     sleepImpl,
+    startUsageReceiverImpl = startUsageReceiver,
+    nowImpl = Date.now,
   } = deps;
   const cfg = { platform, env, ...(home ? { home } : {}) };
   const setupDeps = { cfg, stdout, stderr, openBrowserImpl, startSetupServerImpl };
@@ -76,6 +137,10 @@ export async function main(argv, deps = {}) {
   if (first === '--version' || first === '-v') {
     stdout.write(`${pkg.version}\n`);
     return 0;
+  }
+
+  if (first === 'usage') {
+    return runUsage(rest, { cfg, stdout, stderr });
   }
 
   const catalog = await catalogImpl();
@@ -135,8 +200,58 @@ export async function main(argv, deps = {}) {
     return 1;
   }
   const selection = provider.models ? values.WRAPPER_CODE_MODEL : (values.WRAPPER_CODE_PROFILE || provider.defaultProfile);
-  await showSplash({ stdout, env, version: pkg.version, providerName: provider.name, selection, ...(sleepImpl ? { sleep: sleepImpl } : {}) });
-  const { code, error } = await launchImpl({ claudePath, args: rest, env: childEnv });
+
+  // Usage telemetry: a local OTLP receiver for this session.
+  let receiver = null;
+  const sessionId = randomBytes(8).toString('hex');
+  const collected = [];
+  // Inside a wrapper-code session the shell carries the parent's injected receiver vars.
+  // They are ours, not the user's: drop them so this session gets its own receiver.
+  const nested = String(env.OTEL_EXPORTER_OTLP_HEADERS || '').includes(`${USAGE_TOKEN_HEADER}=`);
+  if (nested) for (const key of INJECTED_OTEL_KEYS) delete childEnv[key];
+  const userOtel = (key) => !(nested && INJECTED_OTEL_KEYS.includes(key)) && env[key];
+  if (env.WRAPPER_CODE_NO_USAGE === '1') {
+    // Opted out: inject nothing, print nothing.
+  } else if (userOtel('OTEL_EXPORTER_OTLP_ENDPOINT') || userOtel('OTEL_EXPORTER_OTLP_LOGS_ENDPOINT') || userOtel('CLAUDE_CODE_ENABLE_TELEMETRY')) {
+    stdout.write('usage: your OTEL settings are kept; wrapper-code will not record this session\n');
+  } else {
+    try {
+      const lingerMs = Number(env.WRAPPER_CODE_USAGE_LINGER_MS) || DEFAULT_LINGER_MS;
+      receiver = await startUsageReceiverImpl({
+        lingerMs,
+        onEvent: (raw, ts) => {
+          collected.push({ ts, sessionId, provider: provider.id, selection, ...raw });
+        },
+      });
+      for (const key of Object.keys(childEnv)) if (/^OTEL_EXPORTER_OTLP_LOGS_/.test(key)) delete childEnv[key];
+      Object.assign(childEnv, receiver.env);
+    } catch (err) {
+      stdout.write(`usage: receiver could not start (${err.message}); session runs without usage tracking\n`);
+    }
+  }
+
+  let startedAt;
+  let code;
+  let error;
+  try {
+    await showSplash({ stdout, env, version: pkg.version, providerName: provider.name, selection, ...(sleepImpl ? { sleep: sleepImpl } : {}) });
+    startedAt = nowImpl();
+    ({ code, error } = await launchImpl({ claudePath, args: rest, env: childEnv }));
+  } catch (err) {
+    // A listening receiver would keep the process alive: close it before propagating.
+    if (receiver) await Promise.resolve().then(() => receiver.close({ now: true })).catch(() => {});
+    throw err;
+  }
   if (error) stderr.write(`Failed to start claude: ${error.message}\n`);
+  const endedAt = nowImpl();
+
+  if (receiver) {
+    // Usage problems are reported, never allowed to change claude's exit code.
+    try {
+      await finishUsage({ receiver, failedToStart: Boolean(error), collected, cfg, home, provider, selection, startedAt, endedAt, stdout, stderr, env });
+    } catch (err) {
+      try { stderr.write(`usage: ${err?.message ?? String(err)}\n`); } catch { /* nothing left to report to */ }
+    }
+  }
   return code;
 }
