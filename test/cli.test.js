@@ -674,3 +674,12 @@ test('provider .env OTEL_EXPORTER_OTLP_LOGS_* keys are removed from the child en
   assert.match(env.OTEL_EXPORTER_OTLP_ENDPOINT, /^http:\/\/127\.0\.0\.1:\d+$/);
   assert.equal(env.CLAUDE_CODE_ENABLE_TELEMETRY, '1');
 });
+
+test('wrapper-code usage is dispatched and documented in --help', async () => {
+  const out = sink();
+  assert.equal(await main(['usage'], { stdout: out, stderr: sink(), platform: 'linux', env: {}, home: await tmp() }), 0);
+  assert.match(out.text(), /no usage recorded yet/);
+  const help = sink();
+  await main(['--help'], { stdout: help, stderr: sink() });
+  assert.match(help.text(), /wrapper-code usage \[--since 24h\|7d\|30d\|all\] \[--provider <id>\] \[--by-day\] \[--json\]/);
+});

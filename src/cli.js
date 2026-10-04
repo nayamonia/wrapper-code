@@ -10,6 +10,7 @@ import { openBrowser } from './open.js';
 import { startSetupServer } from './setup/server.js';
 import { creditLine } from './credits.js';
 import { showSplash, shouldSplash } from './splash.js';
+import { runUsage } from './usage/report.js';
 import { startUsageReceiver } from './usage/receiver.js';
 import { resolvePrices, estimateCost } from './usage/pricing.js';
 import { appendUsage, usageFilePath } from './usage/store.js';
@@ -25,6 +26,8 @@ Usage:
   wrapper-code <provider> [claude args...]   Launch Claude Code with <provider> (opens setup first if needed)
   wrapper-code setup <provider>              Open the setup page to change the key or model profile
   wrapper-code list                          List providers and whether they are configured
+  wrapper-code usage [--since 24h|7d|30d|all] [--provider <id>] [--by-day] [--json]
+                                             Token usage and estimated cost per provider and model
   wrapper-code --help | --version
 
 Config files live in ~/.config/wrapper-code (POSIX) or %APPDATA%\\wrapper-code (Windows).
@@ -94,6 +97,10 @@ export async function main(argv, deps = {}) {
   if (first === '--version' || first === '-v') {
     stdout.write(`${pkg.version}\n`);
     return 0;
+  }
+
+  if (first === 'usage') {
+    return runUsage(rest, { cfg, stdout, stderr });
   }
 
   const catalog = await catalogImpl();
