@@ -111,7 +111,7 @@ export function renderSite({ catalog, version }) {
     <div class="box"><h3>Isolated</h3><p>Only environment variables change, and only for that process. <code>claude</code> on its own keeps using Anthropic.</p></div>
     <div class="box"><h3>Side by side</h3><p>Run several Claude Code sessions at the same time on one computer, each with a different LLM: <code>wrapper-code deepseek</code> in one terminal, <code>wrapper-code qwencloud</code> in another, plain <code>claude</code> in a third.</p></div>
     <div class="box"><h3>Setup in the browser</h3><p>The first launch opens a local page: paste the key, pick a model profile, and the key is tested before anything is saved.</p></div>
-    <div class="box"><h3>Token usage</h3><p>Every session records its requests and tokens locally and prints a short summary when Claude Code exits. <code>wrapper-code usage</code> adds them up by provider, model and day. Nothing leaves your machine.</p></div>
+    <div class="box"><h3>Token usage</h3><p>Every session records its requests and tokens locally and prints a short summary when Claude Code exits. <code>wrapper-code usage</code> adds them up by provider, model and day, and <code>wrapper-code usage clear</code> deletes them. Start your own Claude Code with <code>wrapper-code claude</code> and your Anthropic usage is counted too, with nothing else changed. Nothing leaves your machine.</p></div>
   </section>
 
   <section id="providers">
@@ -147,8 +147,10 @@ ${rows}
       <li>Reads the provider definition: base URL, model variables, how to test a key.</li>
       <li>Reads your saved choices; runs the setup page if the key is missing.</li>
       <li>Builds an environment from your shell, the provider and your profile. <code>ANTHROPIC_API_KEY</code> is removed so Claude Code cannot fall back to Anthropic.</li>
+      <li>Starts a small receiver on <code>127.0.0.1</code> for Claude Code's own token counts, which become the usage report.</li>
       <li>Finds <code>claude</code> on your PATH and runs it with that environment, forwarding your arguments and its exit code.</li>
     </ol>
+    <p><code>wrapper-code claude</code> is the exception: it skips the first three steps and runs your own Claude Code with your environment as it is, only adding the receiver.</p>
     <p class="muted">Requires Node.js 18+ and Claude Code. Works on macOS, Linux and Windows. Version v${esc(version)}.</p>
   </section>
 

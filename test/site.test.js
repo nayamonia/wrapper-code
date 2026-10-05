@@ -87,9 +87,19 @@ test('the committed docs/index.html is up to date with the catalog (run: npm run
 
 test('renderSite describes the passthrough provider without a key or a model list', async () => {
   const html = renderSite({ catalog: await loadCatalog(), version: '0.1.0' });
-  const row = html.slice(html.indexOf('<code>wrapper-code claude</code>'));
+  const row = html.slice(html.indexOf('<td><code>wrapper-code claude</code>'));
   const cell = row.slice(0, row.indexOf('</tr>'));
   assert.match(cell, /Your own Claude Code login/);
   assert.match(cell, /only token usage is recorded/);
   assert.doesNotMatch(cell, /No key|discovered/);
+});
+
+test('renderSite mentions usage clear and the claude passthrough in the usage card and in how it works', async () => {
+  const html = renderSite({ catalog: await loadCatalog(), version: '0.1.0' });
+  const card = html.slice(html.indexOf('<h3>Token usage</h3>'));
+  const text = card.slice(0, card.indexOf('</div>'));
+  assert.match(text, /<code>wrapper-code usage clear<\/code>/);
+  assert.match(text, /<code>wrapper-code claude<\/code>/);
+  const how = html.slice(html.indexOf('<h2>How it works</h2>'));
+  assert.match(how, /<code>wrapper-code claude<\/code> is the exception/);
 });

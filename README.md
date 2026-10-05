@@ -6,6 +6,8 @@ Website: [nayamonia.github.io/wrapper-code](https://nayamonia.github.io/wrapper-
 
 `wrapper-code deepseek` opens a normal interactive Claude Code session that talks to DeepSeek. Running `claude` directly still uses Anthropic, exactly as before. Nothing is written under `~/.claude`, and no variable leaks into your shell: the provider settings exist only inside that one session.
 
+Every session records its token usage on your machine, and `wrapper-code usage` adds it up by provider and model. `wrapper-code claude` starts your own Claude Code unchanged, so your Anthropic usage is counted in the same report.
+
 ## Install
 
 Requires Node.js 18+ and Claude Code (`npm install -g @anthropic-ai/claude-code`).
