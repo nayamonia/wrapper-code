@@ -78,11 +78,11 @@ test('list shows configured status per provider', async () => {
   const opts = { platform: 'linux', env: {}, home };
   const before = sink();
   await main(['list'], { stdout: before, stderr: sink(), ...opts });
-  assert.match(before.text(), /deepseek\s+DeepSeek\s+not configured/);
+  assert.match(before.text(), /deepseek\s+deepseek\s+payg\s+not configured\s+-/);
   await writeProviderEnv('deepseek', { ANTHROPIC_AUTH_TOKEN: 'sk' }, opts);
   const after = sink();
   await main(['list'], { stdout: after, stderr: sink(), ...opts });
-  assert.match(after.text(), /deepseek\s+DeepSeek\s+configured/);
+  assert.match(after.text(), /deepseek\s+deepseek\s+payg\s+configured\s+flash-1m/);
 });
 
 test('launch without a credential runs setup; cancelled setup exits 1 without launching', async () => {
@@ -212,13 +212,15 @@ async function malformedHome() {
   return home;
 }
 
-test('list reports a malformed env file as an error row and exits 1', async () => {
+test('list reports a malformed env file as an error row, the message on stderr, and exits 1', async () => {
   const home = await malformedHome();
   const stdout = sink();
-  const code = await main(['list'], { stdout, stderr: sink(), home, env: {}, platform: 'linux' });
+  const stderr = sink();
+  const code = await main(['list'], { stdout, stderr, home, env: {}, platform: 'linux' });
   assert.equal(code, 1);
-  assert.match(stdout.text(), /deepseek\s+DeepSeek\s+error:/);
-  assert.match(stdout.text(), /wrapper-code setup deepseek/);
+  assert.match(stdout.text(), /^deepseek\s+deepseek\s+payg\s+error\s+-$/m);
+  assert.match(stdout.text(), /^qwen\s+qwencloud\s+payg\s+not configured\s+-$/m, 'other providers still listed');
+  assert.match(stderr.text(), /^wrapper-code: .*deepseek\.env: Malformed line 1\. Run: wrapper-code setup deepseek$/m);
 });
 
 test('setup with a malformed env file warns, starts the server with empty current and never prints the raw line', async () => {
@@ -249,7 +251,7 @@ test('a pasted bare key in the env file is never echoed by list', async () => {
   const code = await main(['list'], { stdout, stderr, home, env: {}, platform: 'linux' });
   assert.equal(code, 1);
   assert.doesNotMatch(stdout.text() + stderr.text(), /SECRET/);
-  assert.match(stdout.text(), /Malformed line 1/);
+  assert.match(stderr.text(), /Malformed line 1/);
 });
 
 test('reportFatal prints ConfigError plainly and other errors with a stack', () => {
@@ -328,7 +330,7 @@ process.exit(0);
 test('list shows ollama alongside deepseek', async () => {
   const out = sink();
   await main(['list'], { stdout: out, stderr: sink(), platform: 'linux', env: {}, home: await tmp() });
-  assert.match(out.text(), /ollama\s+Ollama\s+not configured/);
+  assert.match(out.text(), /local\s+ollama\s+local\s+not configured/);
 });
 
 test('launch on a color TTY shows the 8-bit splash instead of the one-line banner', async () => {
@@ -355,8 +357,8 @@ test('launch on a color TTY shows the 8-bit splash instead of the one-line banne
 test('list shows qwencloud as not configured before setup', async () => {
   const out = sink();
   await main(['list'], { stdout: out, stderr: sink(), platform: 'linux', env: {}, home: await tmp() });
-  assert.match(out.text(), /qwencloud\s+Qwen Cloud\s+not configured/);
-  assert.doesNotMatch(out.text(), /^qwen\s/m);
+  assert.match(out.text(), /qwen\s+qwencloud\s+payg\s+not configured/);
+  assert.doesNotMatch(out.text(), /^\S+\s+qwen\s/m, 'no provider with the retired id qwen');
 });
 
 test('qwencloud: launch before setup opens the setup page for the qwencloud provider', async () => {
@@ -454,9 +456,9 @@ test('stale qwen.env and alibaba-token.env files are ignored by list and by othe
   await writeProviderEnv('deepseek', { ANTHROPIC_AUTH_TOKEN: 'sk' }, opts);
   const out = sink();
   assert.equal(await main(['list'], { stdout: out, stderr: sink(), ...opts }), 0);
-  assert.match(out.text(), /deepseek\s+DeepSeek\s+configured/);
-  assert.match(out.text(), /qwencloud\s+Qwen Cloud\s+not configured/);
-  assert.match(out.text(), /alibaba\s+Alibaba Token Plan\s+not configured/);
+  assert.match(out.text(), /deepseek\s+deepseek\s+payg\s+configured\s+flash-1m/);
+  assert.match(out.text(), /qwen\s+qwencloud\s+payg\s+not configured/);
+  assert.match(out.text(), /qwen\s+alibaba\s+plan\s+not configured/);
   assert.doesNotMatch(out.text(), /old-cp|old-tp/);
   const launched = [];
   assert.equal(await main(['deepseek'], { stdout: sink(), stderr: sink(), ...opts, resolveClaudeImpl: () => '/c', launchImpl: async (o) => { launched.push(o); return { code: 0 }; } }), 0);
@@ -466,7 +468,7 @@ test('stale qwen.env and alibaba-token.env files are ignored by list and by othe
 test('list shows openrouter as not configured before setup', async () => {
   const out = sink();
   await main(['list'], { stdout: out, stderr: sink(), platform: 'linux', env: {}, home: await tmp() });
-  assert.match(out.text(), /openrouter\s+OpenRouter\s+not configured/);
+  assert.match(out.text(), /gateway\s+openrouter\s+payg\s+not configured/);
 });
 
 test('openrouter: a key without a model is not configured and opens setup', async () => {
@@ -830,4 +832,45 @@ test('the receiver lingers 500 ms after claude exits by default', async () => {
     launchImpl: async () => ({ code: 0 }),
   });
   assert.deepEqual(seen, [500]);
+});
+
+test('list prints FAMILY PROVIDER BILLING STATUS SELECTION, grouped by family, with the selection', async () => {
+  const home = await tmp();
+  const opts = { platform: 'linux', env: {}, home };
+  const keyed = (over) => ({ env: {}, credential: { env: 'ANTHROPIC_AUTH_TOKEN', label: 'k' }, profiles: { a: {}, b: {} }, defaultProfile: 'a', test: {}, ...over });
+  const catalog = new Map([
+    ['zeta', keyed({ id: 'zeta', name: 'Zeta', family: 'zz', billing: 'payg' })],
+    ['beta', keyed({ id: 'beta', name: 'Beta', family: 'beta', billing: 'payg' })],
+    ['beta-plan', keyed({ id: 'beta-plan', name: 'Beta Plan', family: 'beta', billing: 'plan' })],
+    ['loc', { id: 'loc', name: 'Loc', family: 'local', billing: 'local', env: {}, credential: null, models: { envKeys: ['ANTHROPIC_MODEL'] }, test: {} }],
+  ]);
+  await writeProviderEnv('zeta', { ANTHROPIC_AUTH_TOKEN: 'sk-z', WRAPPER_CODE_PROFILE: 'b' }, opts);
+  await writeProviderEnv('beta-plan', { ANTHROPIC_AUTH_TOKEN: 'sk-b' }, opts);
+  await writeProviderEnv('loc', { WRAPPER_CODE_MODEL: 'qwen3-coder:30b' }, opts);
+  const out = sink();
+  const err = sink();
+  const code = await main(['list'], { stdout: out, stderr: err, ...opts, catalogImpl: async () => catalog });
+  assert.equal(code, 0);
+  assert.equal(err.text(), '');
+  assert.equal(out.text(), [
+    'FAMILY  PROVIDER   BILLING  STATUS          SELECTION',
+    'beta    beta-plan  plan     configured      a',
+    'beta    beta       payg     not configured  -',
+    'local   loc        local    configured      qwen3-coder:30b',
+    'zz      zeta       payg     configured      b',
+  ].join('\n') + '\n');
+  assert.doesNotMatch(out.text(), /sk-z|sk-b/);
+});
+
+test('list groups the real catalog by family, plan before payg', async () => {
+  const out = sink();
+  await main(['list'], { stdout: out, stderr: sink(), platform: 'linux', env: {}, home: await tmp() });
+  const rows = out.text().trimEnd().split('\n').slice(1).map((line) => line.split(/ {2,}/).slice(0, 3).join(' '));
+  assert.deepEqual(rows, [
+    'deepseek deepseek payg',
+    'gateway openrouter payg',
+    'local ollama local',
+    'qwen alibaba plan',
+    'qwen qwencloud payg',
+  ]);
 });
