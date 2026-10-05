@@ -18,8 +18,10 @@ const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 const host = (url) => new URL(url).host;
 
 function providerRow(p) {
-  const setup = p.credential ? esc(p.credential.label) : 'No key';
-  const choices = p.profiles
+  const setup = p.passthrough ? 'Your own Claude Code login' : p.credential ? esc(p.credential.label) : 'No key';
+  const choices = p.passthrough
+    ? '<li>Your normal models and settings; only token usage is recorded</li>'
+    : p.profiles
     ? Object.entries(p.profiles).map(([id, prof]) => `<li><code>${esc(id)}</code> ${esc(prof.label)}</li>`).join('')
     : p.credential
       ? '<li>Any model with tool calling, picked from the live catalog at setup time</li>'
@@ -133,7 +135,7 @@ ${rows}
       <li><strong>Plain <code>claude</code> cannot be hijacked.</strong> Nothing is written under <code>~/.claude</code>, and there is no "system default" mode, so no setting could make your normal Claude Code talk to another backend. CCR has such a scope; its own guide recommends starting with "only opened from CCR" for the same reason.</li>
       <li><strong>Side by side.</strong> Each session carries its own environment, so <code>wrapper-code deepseek</code>, <code>wrapper-code ollama</code> and plain <code>claude</code> can run at the same time in three terminals.</li>
       <li><strong>The provider's integration, unchanged.</strong> Each provider definition follows the provider's published Claude Code setup (linked in the table above), and what reaches Claude Code is what the provider's endpoint sends: streaming, tool calls, caching and thinking as the provider implements them, with no translation layer in between.</li>
-      <li><strong>Small and readable.</strong> One npm package with no runtime dependencies (25 files, about 100 kB, Node.js 18+). The whole configuration is one environment file per provider that you can <code>cat</code>; export the same variables by hand and you get the same session, with or without wrapper-code.</li>
+      <li><strong>Small and readable.</strong> One npm package with no runtime dependencies (27 files, about 100 kB, Node.js 18+). The whole configuration is one environment file per provider that you can <code>cat</code>; export the same variables by hand and you get the same session, with or without wrapper-code.</li>
     </ul>
     <p>What wrapper-code does not do, by design: per-request routing, fallbacks, retries, key rotation, several providers in one session, protocol translation (the provider must speak the Anthropic Messages API), other agents than Claude Code. This reflects CCR 3.1 and its documentation (September 2026); check its repository for the current state.</p>
     <p class="muted">Both can be installed at once. If a CCR profile is set as "system default", check that it did not add <code>ANTHROPIC_BASE_URL</code> to the <code>env</code> block of <code>~/.claude/settings.json</code>: settings there win over the variables wrapper-code sets.</p>

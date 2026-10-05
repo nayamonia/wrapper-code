@@ -84,3 +84,12 @@ test('the committed docs/index.html is up to date with the catalog (run: npm run
   const catalog = await loadCatalog();
   assert.ok(committed === renderSite({ catalog, version: pkg.version }), 'docs/index.html is stale: run `npm run site` and commit the result');
 });
+
+test('renderSite describes the passthrough provider without a key or a model list', async () => {
+  const html = renderSite({ catalog: await loadCatalog(), version: '0.1.0' });
+  const row = html.slice(html.indexOf('<code>wrapper-code claude</code>'));
+  const cell = row.slice(0, row.indexOf('</tr>'));
+  assert.match(cell, /Your own Claude Code login/);
+  assert.match(cell, /only token usage is recorded/);
+  assert.doesNotMatch(cell, /No key|discovered/);
+});

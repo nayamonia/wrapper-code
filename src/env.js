@@ -14,6 +14,7 @@ export function modelEnv(provider, model) {
 }
 
 export function isConfigured(provider, fileValues) {
+  if (provider.passthrough) return true;
   if (provider.credential && !fileValues[provider.credential.env]) return false;
   if (provider.models && !fileValues.WRAPPER_CODE_MODEL) return false;
   return true;
@@ -32,6 +33,10 @@ function selectionEnv(provider, fileValues) {
 const isPrivate = (key) => key.startsWith('WRAPPER_CODE_');
 
 export function buildEnv({ provider, fileValues, baseEnv = process.env }) {
+  if (provider.passthrough) {
+    // The user's own Claude Code: nothing added, nothing removed but the wrapper's settings.
+    return Object.fromEntries(Object.entries(baseEnv).filter(([key]) => !isPrivate(key)));
+  }
   const env = { ...baseEnv, ...selectionEnv(provider, fileValues) };
   for (const [key, value] of Object.entries(fileValues)) {
     if (!isPrivate(key)) env[key] = value;

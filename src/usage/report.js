@@ -1,4 +1,4 @@
-import { readUsage } from './store.js';
+import { readUsage, clearUsage, usageFilePath } from './store.js';
 import { abbreviate } from './summary.js';
 
 export function parseSince(text, now) {
@@ -50,7 +50,53 @@ export function renderReport({ groups, total, skipped = 0, since, byDay = false 
   return `${out.join('\n')}\n`;
 }
 
-export async function runUsage(args, { cfg, stdout, stderr, now = Date.now() }) {
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+// confirm(question) resolves true or false, or null when there is no terminal to ask on.
+async function runClear(args, { cfg, stdout, stderr, confirm, display }) {
+  let provider;
+  let yes = false;
+  for (let i = 0; i < args.length; i += 1) {
+    const a = args[i];
+    if (a === '--provider') provider = args[++i];
+    else if (a.startsWith('--provider=')) provider = a.slice(11);
+    else if (a === '--yes' || a === '-y') yes = true;
+    else {
+      stderr.write(`usage clear: unknown option ${a}\n`);
+      return 1;
+    }
+  }
+  if (provider !== undefined && !provider) {
+    stderr.write('usage clear: --provider expects a provider id\n');
+    return 1;
+  }
+  const { events, skipped } = await readUsage(cfg);
+  const count = provider ? events.filter((e) => e.provider === provider).length : events.length;
+  if (!count && (provider || !skipped)) {
+    stdout.write(`${provider ? `no usage recorded for ${provider}` : 'no usage recorded yet'}; nothing to clear\n`);
+    return 0;
+  }
+  const what = provider
+    ? `${plural(count, 'request')} (${provider})`
+    : `all ${plural(count, 'request')}${skipped ? ` and ${plural(skipped, 'malformed line')}` : ''}`;
+  if (!yes) {
+    const answer = await confirm(`This removes ${what} from ${display(usageFilePath(cfg))}. Continue? [y/N] `);
+    if (answer === null) {
+      stderr.write('usage clear: not a terminal; pass --yes to remove without asking\n');
+      return 1;
+    }
+    if (!answer) {
+      stdout.write('nothing removed\n');
+      return 1;
+    }
+  }
+  const { removed } = await clearUsage({ provider }, cfg);
+  stdout.write(`removed ${plural(removed, 'request')}${provider ? ` (${provider})` : ''}\n`);
+  return 0;
+}
+
+export async function runUsage(args, { cfg, stdout, stderr, now = Date.now(), confirm = async () => null, display = (file) => file }) {
+  if (args[0] === 'clear') return runClear(args.slice(1), { cfg, stdout, stderr, confirm, display });
   let since = '30d';
   let provider;
   let byDay = false;

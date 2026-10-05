@@ -20,6 +20,15 @@ export function validateProvider(provider) {
   if (!BILLINGS.includes(provider.billing)) {
     throw new Error(`${where}: billing must be one of ${BILLINGS.join(', ')}`);
   }
+  if (provider.passthrough !== undefined) {
+    // A passthrough provider launches claude with the user's environment as it is.
+    if (provider.passthrough !== true) throw new Error(`${where}: passthrough must be true when present`);
+    for (const key of ['env', 'profiles', 'models', 'test']) {
+      if (provider[key] !== undefined) throw new Error(`${where}: a passthrough provider cannot have ${key}`);
+    }
+    if (provider.credential !== null) throw new Error(`${where}: a passthrough provider must have credential: null`);
+    return;
+  }
   if (!isObject(provider.env)) throw new Error(`${where}: env must be an object`);
   const hasProfiles = provider.profiles !== undefined;
   const hasModels = provider.models !== undefined;

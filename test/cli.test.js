@@ -444,7 +444,7 @@ test('the retired ids qwen and alibaba-token are unknown and the message lists t
     const stderr = sink();
     const code = await main([old], { stdout: sink(), stderr, platform: 'linux', env: {}, home: await tmp() });
     assert.equal(code, 1);
-    assert.match(stderr.text(), new RegExp(`Unknown provider "${old}"\\. Available: alibaba, deepseek, ollama, openrouter, qwencloud`));
+    assert.match(stderr.text(), new RegExp(`Unknown provider "${old}"\\. Available: alibaba, claude, deepseek, ollama, openrouter, qwencloud`));
   }
 });
 
@@ -867,10 +867,105 @@ test('list groups the real catalog by family, plan before payg', async () => {
   await main(['list'], { stdout: out, stderr: sink(), platform: 'linux', env: {}, home: await tmp() });
   const rows = out.text().trimEnd().split('\n').slice(1).map((line) => line.split(/ {2,}/).slice(0, 3).join(' '));
   assert.deepEqual(rows, [
+    'anthropic claude plan',
     'deepseek deepseek payg',
     'gateway openrouter payg',
     'local ollama local',
     'qwen alibaba plan',
     'qwen qwencloud payg',
   ]);
+});
+
+test('wrapper-code claude launches with the shell env untouched plus the usage receiver, without setup', async () => {
+  const home = await tmp();
+  const env = { ANTHROPIC_API_KEY: 'sk-ant', CLAUDE_CODE_USE_BEDROCK: '1', WRAPPER_CODE_USAGE_LINGER_MS: '1' };
+  const launched = [];
+  const stdout = sink();
+  const code = await main(['claude', '-p', 'hi'], {
+    stdout, stderr: sink(), platform: 'linux', env, home,
+    resolveClaudeImpl: () => '/c',
+    launchImpl: async (o) => { launched.push(o); return { code: 3 }; },
+    startSetupServerImpl: async () => { throw new Error('setup must not open'); },
+    openBrowserImpl: async () => { throw new Error('browser must not open'); },
+  });
+  assert.equal(code, 3);
+  assert.deepEqual(launched[0].args, ['-p', 'hi']);
+  const child = launched[0].env;
+  assert.equal(child.ANTHROPIC_API_KEY, 'sk-ant');
+  assert.equal(child.CLAUDE_CODE_USE_BEDROCK, '1');
+  for (const key of ['ANTHROPIC_BASE_URL', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_MODEL', 'WRAPPER_CODE_USAGE_LINGER_MS']) assert.equal(key in child, false, key);
+  assert.equal(child.CLAUDE_CODE_ENABLE_TELEMETRY, '1');
+  assert.match(child.OTEL_EXPORTER_OTLP_ENDPOINT, /^http:\/\/127\.0\.0\.1:\d+$/);
+  assert.match(stdout.text(), /wrapper-code · Claude Code · /, 'summary head has no empty selection');
+  assert.doesNotMatch(stdout.text(), /not configured|setup/i);
+});
+
+test('list shows claude as configured with no selection; setup claude has nothing to do', async () => {
+  const home = await tmp();
+  const out = sink();
+  await main(['list'], { stdout: out, stderr: sink(), platform: 'linux', env: {}, home });
+  assert.match(out.text(), /^anthropic +claude +plan +configured +-$/m);
+  const setup = sink();
+  const code = await main(['setup', 'claude'], {
+    stdout: setup, stderr: sink(), platform: 'linux', env: {}, home,
+    startSetupServerImpl: async () => { throw new Error('setup must not open'); },
+  });
+  assert.equal(code, 0);
+  assert.match(setup.text(), /Claude Code needs no setup: wrapper-code claude runs it with your own configuration and only records token usage\./);
+});
+
+test('end to end: a claude session is recorded under provider claude with the model Claude Code reports', { skip: isWin }, async () => {
+  const home = await tmp();
+  const binDir = path.join(home, 'bin');
+  await mkdir(binDir);
+  const fake = path.join(binDir, 'claude');
+  await writeFile(fake, `#!/usr/bin/env node
+const fs = require('fs');
+const body = fs.readFileSync(process.env.FIXTURE_PATH, 'utf8');
+const [name, token] = process.env.OTEL_EXPORTER_OTLP_HEADERS.split('=');
+if (process.env.ANTHROPIC_API_KEY !== 'sk-ant-e2e' || process.env.ANTHROPIC_BASE_URL) { console.error('env was changed'); process.exit(98); }
+fetch(process.env.OTEL_EXPORTER_OTLP_ENDPOINT + '/v1/logs', { method: 'POST', headers: { 'content-type': 'application/json', [name]: token }, body })
+  .then((r) => { if (r.status !== 200) throw new Error('receiver answered ' + r.status); process.exit(0); })
+  .catch((e) => { console.error(e.message); process.exit(99); });
+`);
+  await chmod(fake, 0o755);
+  const cfg = { platform: 'linux', env: {}, home };
+  const env = { ...shellEnv(), HOME: home, XDG_CONFIG_HOME: path.join(home, '.config'), PATH: `${binDir}${path.delimiter}${process.env.PATH}`, FIXTURE_PATH, WRAPPER_CODE_USAGE_LINGER_MS: '200', ANTHROPIC_API_KEY: 'sk-ant-e2e' };
+  for (const key of Object.keys(env)) if (/^ANTHROPIC_(BASE_URL|AUTH_TOKEN|MODEL)/.test(key)) delete env[key];
+  const result = await run(['claude'], env);
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /requests 1 · in /);
+  const { events } = await readUsage(cfg);
+  assert.equal(events.length, 1);
+  assert.equal(events[0].provider, 'claude');
+  assert.equal(events[0].selection, '');
+  assert.ok(events[0].model);
+  const report = await run(['usage', '--since', 'all'], env);
+  assert.match(report.stdout, /^claude +\S+ +1 /m);
+  const cleared = await run(['usage', 'clear'], env);
+  assert.equal(cleared.code, 1, 'no terminal, no --yes: refuses');
+  assert.match(cleared.stderr, /pass --yes/);
+  const forced = await run(['usage', 'clear', '--yes'], env);
+  assert.equal(forced.code, 0);
+  assert.match(forced.stdout, /removed 1 request\n/);
+  assert.equal((await readUsage(cfg)).events.length, 0);
+});
+
+test('usage clear goes through the injected confirmation and shows the path with ~', async () => {
+  const opts = await configuredDeepseek();
+  const { appendUsage } = await import('../src/usage/store.js');
+  await appendUsage([{ ts: '2026-10-03T11:00:00Z', sessionId: 's', provider: 'deepseek', selection: 'x', model: 'm', inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheCreationTokens: 0 }], opts);
+  const asked = [];
+  const out = sink();
+  const code = await main(['usage', 'clear'], { stdout: out, stderr: sink(), ...opts, confirmImpl: async (q) => { asked.push(q); return true; } });
+  assert.equal(code, 0);
+  assert.equal(asked[0], 'This removes all 1 request from ~/.config/wrapper-code/usage.jsonl. Continue? [y/N] ');
+  assert.equal((await readUsage(opts)).events.length, 0);
+});
+
+test('--help documents usage clear and the claude passthrough', async () => {
+  const help = sink();
+  await main(['--help'], { stdout: help, stderr: sink() });
+  assert.match(help.text(), /wrapper-code usage clear \[--provider <id>\] \[--yes\]/);
+  assert.match(help.text(), /wrapper-code claude \[claude args\.\.\.\]/);
 });

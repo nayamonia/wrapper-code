@@ -4,6 +4,7 @@ import { ConfigError } from '../src/config.js';
 import { buildEnv, derivedEnv, isConfigured, modelEnv } from '../src/env.js';
 import deepseek from '../src/providers/deepseek.js';
 import ollama from '../src/providers/ollama.js';
+import claude from '../src/providers/claude.js';
 
 test('buildEnv layers process env < provider env < profile env < file values', () => {
   const env = buildEnv({
@@ -127,4 +128,16 @@ test('buildEnv never passes any WRAPPER_CODE_* key to the child, from the file o
   for (const key of Object.keys(env)) assert.doesNotMatch(key, /^WRAPPER_CODE_/);
   assert.equal(env.ANTHROPIC_AUTH_TOKEN, 'sk');
   assert.equal(env.PATH, '/bin');
+});
+
+test('a passthrough provider is always configured and its env is the shell env, untouched', () => {
+  assert.equal(isConfigured(claude, {}), true);
+  const baseEnv = {
+    PATH: '/bin', ANTHROPIC_API_KEY: 'sk-ant', ANTHROPIC_BASE_URL: 'https://corp-proxy', ANTHROPIC_MODEL: 'opus',
+    CLAUDE_CODE_USE_BEDROCK: '1', CLAUDE_CODE_USE_VERTEX: '1', CLAUDE_CODE_USE_FOUNDRY: '1', WRAPPER_CODE_NO_SPLASH: '1',
+  };
+  const env = buildEnv({ provider: claude, fileValues: { ANTHROPIC_AUTH_TOKEN: 'stray', WRAPPER_CODE_PROFILE: 'x' }, baseEnv });
+  const { WRAPPER_CODE_NO_SPLASH, ...expected } = baseEnv;
+  assert.deepEqual(env, expected);
+  assert.notEqual(env, baseEnv);
 });

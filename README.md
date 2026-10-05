@@ -26,6 +26,7 @@ wrapper-code qwencloud             # launch Claude Code with Qwen Cloud (pay-as-
 wrapper-code alibaba               # launch Claude Code with the Alibaba Token Plan (Qwen, DeepSeek, GLM)
 wrapper-code openrouter            # launch Claude Code with any OpenRouter model (OpenAI, Google, Meta, Mistral, xAI...)
 wrapper-code deepseek --resume     # anything after the provider is passed to claude
+wrapper-code claude                # your own Claude Code, unchanged, with its token usage recorded
 wrapper-code setup deepseek        # change the API key or model profile
 wrapper-code list                  # providers by family: billing, status and the selected profile or model
 ```
@@ -33,12 +34,13 @@ wrapper-code list                  # providers by family: billing, status and th
 `wrapper-code list` groups providers of the same family and shows how each one bills (`plan`, `payg` or `local`):
 
 ```
-FAMILY    PROVIDER    BILLING  STATUS          SELECTION
-deepseek  deepseek    payg     configured      flash-1m
-gateway   openrouter  payg     not configured  -
-local     ollama      local    configured      qwen3-coder
-qwen      alibaba     plan     configured      qwen-max
-qwen      qwencloud   payg     not configured  -
+FAMILY     PROVIDER    BILLING  STATUS          SELECTION
+anthropic  claude      plan     configured      -
+deepseek   deepseek    payg     configured      flash-1m
+gateway    openrouter  payg     not configured  -
+local      ollama      local    configured      qwen3-coder
+qwen       alibaba     plan     configured      qwen-max
+qwen       qwencloud   payg     not configured  -
 ```
 
 The first time you launch a provider, a setup page opens in your browser on `127.0.0.1`. Paste your API key, pick a model profile, click **Test and save**. The key is checked against the provider's API before anything is written. Then the session starts right away.
@@ -52,6 +54,7 @@ The first time you launch a provider, a setup page opens in your browser on `127
 | `qwencloud` | Qwen Cloud API key (pay-as-you-go, starts with `sk-`, created at home.qwencloud.com/api-keys; new accounts get a free quota). One profile, `pay-as-you-go`: automatic routing (`auto`) with Qwen 3.8 Max for Opus, Qwen 3.8 Flash for Sonnet and Qwen 3.6 Flash for Haiku, 983k context. | [Qwen Cloud × Claude Code](https://docs.qwencloud.com/developer-guides/clients-and-developer-tools/claude-code) |
 | `alibaba` | Token Plan API key from Alibaba Cloud Model Studio (Personal or Team Edition, starts with `sk-sp-`). Profiles: `qwen-max` (default): Qwen 3.8 Max, Qwen 3.8 Flash for subagents. `qwen-plus`: Qwen 3.7 Plus for every role. `deepseek-pro`: DeepSeek V4 Pro, DeepSeek V4.1 Flash for subagents. `glm`: GLM 5.3 for every role. | [Model Studio × Claude Code](https://www.alibabacloud.com/help/en/model-studio/claude-code) |
 | `openrouter` | OpenRouter API key (openrouter.ai/keys), checked for free. The setup page lists every model OpenRouter serves, with a search box; models without tool calling are shown but cannot be selected. The chosen model is used for every role, subagents included. Billing through your OpenRouter credits. | [OpenRouter × Claude Code](https://openrouter.ai/docs/guides/guides/claude-code-integration) |
+| `claude` | Nothing to set up. Runs your own Claude Code exactly as plain `claude` does (your login, your models, your settings; no variable is added or removed) with the usage receiver on, so your Anthropic usage shows up in `wrapper-code usage` next to the other providers. | [Claude Code monitoring](https://code.claude.com/docs/en/monitoring-usage) |
 
 Claude Code's system prompt and tools can exceed 32k tokens, and Ollama serves requests at its own runtime context (`OLLAMA_CONTEXT_LENGTH`, often 32k or less by default), not at the model's maximum. A request that does not fit is silently truncated and the model seems to ignore the prompt. Set Ollama's served context to at least 64k on the Ollama side, for example `OLLAMA_CONTEXT_LENGTH=65536 ollama serve`, or the context-length setting in the Ollama app.
 
@@ -97,7 +100,7 @@ wrapper-code wants to solve a smaller problem: start one Claude Code session on 
 - **Plain `claude` cannot be hijacked.** Nothing is written under `~/.claude`, and there is no "system default" mode, so no setting could make your normal Claude Code talk to another backend. CCR has such a scope; its own guide recommends starting with "only opened from CCR" for the same reason.
 - **Side by side.** Each session carries its own environment, so `wrapper-code deepseek`, `wrapper-code ollama` and plain `claude` can run at the same time in three terminals.
 - **The provider's integration, unchanged.** Each provider definition follows the provider's published Claude Code setup (linked in the Providers table), and what reaches Claude Code is what the provider's endpoint sends: streaming, tool calls, caching and thinking as the provider implements them, with no translation layer in between.
-- **Small and readable.** One npm package with no runtime dependencies (25 files, about 100 kB, Node.js 18+). The whole configuration is one environment file per provider that you can `cat`; export the same variables by hand and you get the same session, with or without wrapper-code.
+- **Small and readable.** One npm package with no runtime dependencies (27 files, about 100 kB, Node.js 18+). The whole configuration is one environment file per provider that you can `cat`; export the same variables by hand and you get the same session, with or without wrapper-code.
 
 What wrapper-code does not do, by design: per-request routing, fallbacks, retries, key rotation, several providers in one session, protocol translation (the provider must speak the Anthropic Messages API), other agents than Claude Code. This reflects CCR 3.1 and its documentation (September 2026); check its repository for the current state.
 
@@ -118,7 +121,13 @@ Every session records its token usage locally. When Claude Code exits, wrapper-c
 wrapper-code usage                 # last 30 days by provider and model
 wrapper-code usage --since 7d --provider deepseek --by-day
 wrapper-code usage --since all --json
+wrapper-code usage clear           # delete everything recorded (asks first)
+wrapper-code usage clear --provider deepseek --yes
 ```
+
+`usage clear` deletes the recorded usage: all of it, or only one provider's with `--provider`. It shows what will be removed and asks before deleting; `--yes` skips the question, and without a terminal it refuses unless `--yes` is given. There is no undo.
+
+To count your regular Claude Code usage too, start it with `wrapper-code claude` instead of `claude`. Nothing about the session changes; it is only recorded.
 
 How it works: the wrapper starts a tiny OpenTelemetry receiver on `127.0.0.1` for the session and points Claude Code's own telemetry export at it. The token counts are the ones Claude Code reports for each API request. Nothing leaves your machine; the data lives in `~/.config/wrapper-code/usage.jsonl` (model, tokens and duration per request; no prompts or responses). Set `WRAPPER_CODE_NO_USAGE=1` to turn it off. If your shell already defines `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` or `CLAUDE_CODE_ENABLE_TELEMETRY`, wrapper-code keeps your settings and records nothing for that session. While it records, any `OTEL_EXPORTER_OTLP_LOGS_*` variable in the session's environment is dropped so it cannot redirect the export. OTEL variables set in Claude Code's own settings file (the `env` block of `~/.claude/settings.json`) are not detected; if you export telemetry from there, set `WRAPPER_CODE_NO_USAGE=1`.
 

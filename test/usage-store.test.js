@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, writeFile, stat, mkdir, chmod } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, stat, mkdir, chmod, appendFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { usageFilePath, appendUsage, readUsage } from '../src/usage/store.js';
+import { usageFilePath, appendUsage, readUsage, clearUsage } from '../src/usage/store.js';
 
 const EV = (over = {}) => ({
   ts: '2026-10-03T14:02:11.482Z', sessionId: 'abc', provider: 'deepseek', selection: 'flash-1m', model: 'deepseek-flash',
@@ -87,4 +87,49 @@ test('readUsage skips valid-JSON lines without a string model or with an unparse
   const { events, skipped } = await readUsage(o);
   assert.equal(events.length, 1);
   assert.equal(skipped, 2);
+});
+
+test('clearUsage without a filter removes the file and reports how many events went', async () => {
+  const o = await opts();
+  const file = await appendUsage([EV(), EV({ provider: 'ollama' })], o);
+  assert.deepEqual(await clearUsage({}, o), { removed: 2 });
+  await assert.rejects(stat(file), { code: 'ENOENT' });
+  assert.deepEqual(await readUsage(o), { events: [], skipped: 0 });
+});
+
+test('clearUsage on a missing file removes nothing and does not fail', async () => {
+  const o = await opts();
+  assert.deepEqual(await clearUsage({}, o), { removed: 0 });
+  assert.deepEqual(await clearUsage({ provider: 'deepseek' }, o), { removed: 0 });
+});
+
+test('clearUsage by provider keeps the other providers and the malformed lines, at 0600', async () => {
+  const o = await opts();
+  const file = await appendUsage([EV(), EV({ provider: 'ollama', outputTokens: 9 })], o);
+  await appendFile(file, 'not json\n');
+  await appendUsage([EV({ outputTokens: 11 })], o);
+  assert.deepEqual(await clearUsage({ provider: 'deepseek' }, o), { removed: 2 });
+  const text = await readFile(file, 'utf8');
+  assert.equal(text.split('\n').filter(Boolean).length, 2);
+  assert.match(text, /not json\n/);
+  const { events, skipped } = await readUsage(o);
+  assert.deepEqual(events.map((e) => [e.provider, e.outputTokens]), [['ollama', 9]]);
+  assert.equal(skipped, 1);
+  if (process.platform !== 'win32') assert.equal((await stat(file)).mode & 0o777, 0o600);
+  assert.deepEqual((await readdir(path.dirname(file))).sort(), ['usage.jsonl'], 'no temp file left behind');
+});
+
+test('clearUsage by provider with no matching line leaves the file untouched', async () => {
+  const o = await opts();
+  const file = await appendUsage([EV()], o);
+  const before = await readFile(file, 'utf8');
+  assert.deepEqual(await clearUsage({ provider: 'ollama' }, o), { removed: 0 });
+  assert.equal(await readFile(file, 'utf8'), before);
+});
+
+test('clearUsage by provider removes the file when nothing is left', async () => {
+  const o = await opts();
+  const file = await appendUsage([EV()], o);
+  assert.deepEqual(await clearUsage({ provider: 'deepseek' }, o), { removed: 1 });
+  await assert.rejects(stat(file), { code: 'ENOENT' });
 });

@@ -197,7 +197,7 @@ test('help texts no longer mention the Coding Plan or the old ids', async () => 
   assert.doesNotMatch(alibaba, /Coding Plan|wrapper-code qwen\b|alibaba-token/);
   const qwencloud = catalog.get('qwencloud').credential.help;
   assert.doesNotMatch(qwencloud, /Coding Plan|alibaba-token/);
-  assert.deepEqual([...catalog.keys()].sort(), ['alibaba', 'deepseek', 'ollama', 'openrouter', 'qwencloud']);
+  assert.deepEqual([...catalog.keys()].sort(), ['alibaba', 'claude', 'deepseek', 'ollama', 'openrouter', 'qwencloud']);
 });
 
 test('validateProvider accepts models.format ollama/openrouter and models.emptyHint, rejects other formats', () => {
@@ -258,9 +258,25 @@ test('catalog family and billing per provider', async () => {
   const actual = Object.fromEntries([...catalog.values()].map((p) => [p.id, `${p.family}/${p.billing}`]));
   assert.deepEqual(actual, {
     alibaba: 'qwen/plan',
+    claude: 'anthropic/plan',
     deepseek: 'deepseek/payg',
     ollama: 'local/local',
     openrouter: 'gateway/payg',
     qwencloud: 'qwen/payg',
   });
+});
+
+test('a passthrough provider needs no env, profiles, models or test, and cannot carry them', () => {
+  const base = { id: 'native', name: 'Native', family: 'anthropic', billing: 'plan', docs: 'https://example.com', passthrough: true, credential: null };
+  assert.doesNotThrow(() => validateProvider(base));
+  for (const extra of [{ env: { A: '1' } }, { profiles: {} }, { models: {} }, { test: { url: 'https://x' } }, { credential: { env: 'K', label: 'Key' } }]) {
+    assert.throws(() => validateProvider({ ...base, ...extra }), /passthrough/);
+  }
+  assert.throws(() => validateProvider({ ...base, passthrough: 'yes' }), /passthrough must be true/);
+});
+
+test('the claude provider is the passthrough one', async () => {
+  const claude = (await loadCatalog()).get('claude');
+  assert.equal(claude.passthrough, true);
+  assert.equal(claude.name, 'Claude Code');
 });
