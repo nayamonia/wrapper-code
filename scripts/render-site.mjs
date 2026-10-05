@@ -12,6 +12,7 @@ import { loadCatalog } from '../src/catalog.js';
 
 const REPO = 'https://github.com/nayamonia/wrapper-code';
 const NPM = 'https://www.npmjs.com/package/wrapper-code';
+const CCR = 'https://github.com/musistudio/claude-code-router';
 
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const host = (url) => new URL(url).host;
@@ -78,6 +79,10 @@ export function renderSite({ catalog, version }) {
   ul.plain { list-style: none; margin: 0; padding: 0; }
   ul.plain li { margin: 0 0 4px; }
   ul.plain code { color: var(--yellow); }
+  .compare p { color: #c9c9d6; font-size: 15px; margin: 0 0 14px; }
+  .compare ul { margin: 0 0 18px; padding-left: 20px; color: #c9c9d6; font-size: 15px; }
+  .compare li { margin-bottom: 8px; }
+  .compare li strong { color: var(--fg); }
   .how ol { padding-left: 20px; color: #c9c9d6; }
   .how li { margin-bottom: 6px; }
   footer { margin: 48px 0 32px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; text-align: center; }
@@ -89,7 +94,7 @@ export function renderSite({ catalog, version }) {
 <div class="wrap">
   <nav>
     <a class="wordmark" href="#top" aria-label="wrapper-code">${renderSvg(wordmarkRows('WRAPPER-CODE'))}</a>
-    <div class="links"><a href="#install">Install</a><a href="#providers">Providers</a><a href="${REPO}" rel="noopener">GitHub</a><a href="${NPM}" rel="noopener">npm</a></div>
+    <div class="links"><a href="#install">Install</a><a href="#providers">Providers</a><a href="#compare">vs CCR</a><a href="${REPO}" rel="noopener">GitHub</a><a href="${NPM}" rel="noopener">npm</a></div>
   </nav>
 
   <section class="hero" id="top">
@@ -115,6 +120,23 @@ export function renderSite({ catalog, version }) {
 ${rows}
       </tbody>
     </table>
+  </section>
+
+  <section class="compare" id="compare">
+    <h2>wrapper-code vs claude-code-router</h2>
+    <p><a href="${CCR}" rel="noopener">claude-code-router</a> (CCR) is the best-known way to run Claude Code on other models. It is a local gateway: a background service on <code>127.0.0.1:3456</code> receives every request from Claude Code (and from Codex, Kimi CLI, OpenCode and other agents), decides per request which provider and model to call, and can rewrite, retry, fall back to another model or key, translate to OpenAI- and Gemini-style APIs, and add vision, web search or MCP tools to a model that lacks them. It has a management UI, request logs with cost estimates, a desktop app and Docker images. If you need any of that, use CCR.</p>
+    <p>wrapper-code wants to solve a smaller problem: start one Claude Code session on one other provider, with nothing changed for your normal Claude Code and nothing extra running. It sets the provider's <code>ANTHROPIC_BASE_URL</code>, key and model variables in the environment of one <code>claude</code> process and gets out of the way. That is the whole design, and it is where its advantages come from:</p>
+    <ul>
+      <li><strong>Nothing between Claude Code and the model.</strong> Requests go straight to the provider's endpoint. There is no local process to parse, rewrite and re-stream every request and response, and none that can be down. CCR's documentation lists its running service as a prerequisite for a Claude Code launched from it.</li>
+      <li><strong>Your prompts stay between Claude Code and the provider.</strong> wrapper-code never sees them; the only thing it receives is Claude Code's own token counts, over a loopback port with a random per-session token. CCR's gateway sees every request, and its request logs store request and response bodies (configurable: all, errors only or none; kept for the current day).</li>
+      <li><strong>Nothing runs when you are not working.</strong> No daemon, no desktop app, no database, no port left open. When <code>claude</code> exits, wrapper-code prints the usage block and exits too.</li>
+      <li><strong>Plain <code>claude</code> cannot be hijacked.</strong> Nothing is written under <code>~/.claude</code>, and there is no "system default" mode, so no setting could make your normal Claude Code talk to another backend. CCR has such a scope; its own guide recommends starting with "only opened from CCR" for the same reason.</li>
+      <li><strong>Side by side.</strong> Each session carries its own environment, so <code>wrapper-code deepseek</code>, <code>wrapper-code ollama</code> and plain <code>claude</code> can run at the same time in three terminals.</li>
+      <li><strong>The provider's integration, unchanged.</strong> Each provider definition follows the provider's published Claude Code setup (linked in the table above), and what reaches Claude Code is what the provider's endpoint sends: streaming, tool calls, caching and thinking as the provider implements them, with no translation layer in between.</li>
+      <li><strong>Small and readable.</strong> One npm package with no runtime dependencies (25 files, about 100 kB, Node.js 18+). The whole configuration is one environment file per provider that you can <code>cat</code>; export the same variables by hand and you get the same session, with or without wrapper-code.</li>
+    </ul>
+    <p>What wrapper-code does not do, by design: per-request routing, fallbacks, retries, key rotation, several providers in one session, protocol translation (the provider must speak the Anthropic Messages API), other agents than Claude Code. This reflects CCR 3.1 and its documentation (September 2026); check its repository for the current state.</p>
+    <p class="muted">Both can be installed at once. If a CCR profile is set as "system default", check that it did not add <code>ANTHROPIC_BASE_URL</code> to the <code>env</code> block of <code>~/.claude/settings.json</code>: settings there win over the variables wrapper-code sets.</p>
   </section>
 
   <section class="how">

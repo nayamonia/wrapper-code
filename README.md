@@ -85,6 +85,24 @@ Model names and the other variables come from the built-in catalog on every laun
 
 Your global `~/.claude` (CLAUDE.md, skills, plugins, MCP servers, history) is shared with the provider session, since only environment variables change.
 
+## wrapper-code vs claude-code-router
+
+[claude-code-router](https://github.com/musistudio/claude-code-router) (CCR) is the best-known way to run Claude Code on other models. It is a local gateway: a background service on `127.0.0.1:3456` receives every request from Claude Code (and from Codex, Kimi CLI, OpenCode and other agents), decides per request which provider and model to call, and can rewrite, retry, fall back to another model or key, translate to OpenAI- and Gemini-style APIs, and add vision, web search or MCP tools to a model that lacks them. It has a management UI, request logs with cost estimates, a desktop app and Docker images. If you need any of that, use CCR.
+
+wrapper-code wants to solve a smaller problem: start one Claude Code session on one other provider, with nothing changed for your normal Claude Code and nothing extra running. It sets the provider's `ANTHROPIC_BASE_URL`, key and model variables in the environment of one `claude` process and gets out of the way. That is the whole design, and it is where its advantages come from:
+
+- **Nothing between Claude Code and the model.** Requests go straight to the provider's endpoint. There is no local process to parse, rewrite and re-stream every request and response, and none that can be down. CCR's documentation lists its running service as a prerequisite for a Claude Code launched from it.
+- **Your prompts stay between Claude Code and the provider.** wrapper-code never sees them; the only thing it receives is Claude Code's own token counts, over a loopback port with a random per-session token. CCR's gateway sees every request, and its request logs store request and response bodies (configurable: all, errors only or none; kept for the current day).
+- **Nothing runs when you are not working.** No daemon, no desktop app, no database, no port left open. When `claude` exits, wrapper-code prints the usage block and exits too.
+- **Plain `claude` cannot be hijacked.** Nothing is written under `~/.claude`, and there is no "system default" mode, so no setting could make your normal Claude Code talk to another backend. CCR has such a scope; its own guide recommends starting with "only opened from CCR" for the same reason.
+- **Side by side.** Each session carries its own environment, so `wrapper-code deepseek`, `wrapper-code ollama` and plain `claude` can run at the same time in three terminals.
+- **The provider's integration, unchanged.** Each provider definition follows the provider's published Claude Code setup (linked in the Providers table), and what reaches Claude Code is what the provider's endpoint sends: streaming, tool calls, caching and thinking as the provider implements them, with no translation layer in between.
+- **Small and readable.** One npm package with no runtime dependencies (25 files, about 100 kB, Node.js 18+). The whole configuration is one environment file per provider that you can `cat`; export the same variables by hand and you get the same session, with or without wrapper-code.
+
+What wrapper-code does not do, by design: per-request routing, fallbacks, retries, key rotation, several providers in one session, protocol translation (the provider must speak the Anthropic Messages API), other agents than Claude Code. This reflects CCR 3.1 and its documentation (September 2026); check its repository for the current state.
+
+Both can be installed at once. wrapper-code does not know about CCR; if a CCR profile is set as "system default", check that it did not add `ANTHROPIC_BASE_URL` to the `env` block of `~/.claude/settings.json`, because settings there win over the variables wrapper-code sets (see Notes).
+
 ## Notes
 
 - `~/.claude` is shared, so `env` entries in `~/.claude/settings.json` (and any `apiKeyHelper`) still apply inside the provider session and can override the provider variables. If a session talks to the wrong backend, check there first.
