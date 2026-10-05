@@ -3,6 +3,8 @@
 export default {
   id: 'ollama',
   name: 'Ollama',
+  family: 'local',
+  billing: 'local',
   docs: 'https://docs.ollama.com/integrations/claude-code',
   credential: null,
   env: {

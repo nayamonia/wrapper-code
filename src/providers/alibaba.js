@@ -14,6 +14,8 @@ const roles = (main, fast) => ({
 export default {
   id: 'alibaba',
   name: 'Alibaba Token Plan',
+  family: 'qwen',
+  billing: 'plan',
   docs: 'https://www.alibabacloud.com/help/en/model-studio/claude-code',
   credential: {
     env: 'ANTHROPIC_AUTH_TOKEN',

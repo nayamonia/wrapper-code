@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { loadCatalog, validateProvider } from '../src/catalog.js';
+import { loadCatalog, validateProvider, BILLINGS } from '../src/catalog.js';
 
 const valid = () => ({
-  id: 'x', name: 'X', docs: 'https://x', credential: { env: 'ANTHROPIC_AUTH_TOKEN', label: 'API key', help: 'h' },
+  id: 'x', name: 'X', family: 'x', billing: 'payg', docs: 'https://x', credential: { env: 'ANTHROPIC_AUTH_TOKEN', label: 'API key', help: 'h' },
   env: { ANTHROPIC_BASE_URL: 'https://x/anthropic' },
   profiles: { p: { label: 'P', env: { ANTHROPIC_MODEL: 'm' } } },
   defaultProfile: 'p', test: { method: 'GET', url: 'https://x/models', auth: 'bearer' }, editableBaseUrl: false,
@@ -64,7 +64,7 @@ test('every catalog entry is valid and keyed by its id', async () => {
 });
 
 const validModels = () => ({
-  id: 'y', name: 'Y', docs: 'https://y', credential: null,
+  id: 'y', name: 'Y', family: 'y', billing: 'local', docs: 'https://y', credential: null,
   env: { ANTHROPIC_BASE_URL: 'http://localhost:1', ANTHROPIC_AUTH_TOKEN: 'y' },
   models: { discoverPath: '/api/tags', requireCapability: 'tools', envKeys: ['ANTHROPIC_MODEL'], note: 'n' },
   test: { method: 'GET', path: '/api/tags', auth: 'none' }, editableBaseUrl: true,
@@ -235,4 +235,32 @@ test('loadCatalog loads openrouter: key, gateway discovery flag, openrouter-form
 test('ollama carries its empty-list hint in the catalog', async () => {
   const catalog = await loadCatalog();
   assert.match(catalog.get('ollama').models.emptyHint, /ollama pull/);
+});
+
+test('validateProvider requires family as lowercase letters, digits and dashes', () => {
+  assert.throws(() => validateProvider({ ...valid(), family: undefined }), /family/);
+  assert.throws(() => validateProvider({ ...valid(), family: '' }), /family/);
+  assert.throws(() => validateProvider({ ...valid(), family: 'Qwen' }), /family/);
+  assert.throws(() => validateProvider({ ...valid(), family: 'qwen cloud' }), /family/);
+  assert.doesNotThrow(() => validateProvider({ ...valid(), family: 'kimi-2' }));
+});
+
+test('validateProvider accepts only plan, payg and local as billing', () => {
+  assert.deepEqual(BILLINGS, ['plan', 'payg', 'local']);
+  for (const billing of BILLINGS) assert.doesNotThrow(() => validateProvider({ ...valid(), billing }));
+  for (const billing of [undefined, '', 'gateway', 'cloud', 'PAYG']) {
+    assert.throws(() => validateProvider({ ...valid(), billing }), /billing/);
+  }
+});
+
+test('catalog family and billing per provider', async () => {
+  const catalog = await loadCatalog();
+  const actual = Object.fromEntries([...catalog.values()].map((p) => [p.id, `${p.family}/${p.billing}`]));
+  assert.deepEqual(actual, {
+    alibaba: 'qwen/plan',
+    deepseek: 'deepseek/payg',
+    ollama: 'local/local',
+    openrouter: 'gateway/payg',
+    qwencloud: 'qwen/payg',
+  });
 });
