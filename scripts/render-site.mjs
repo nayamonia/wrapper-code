@@ -12,6 +12,7 @@ import { loadCatalog } from '../src/catalog.js';
 
 const REPO = 'https://github.com/nayamonia/wrapper-code';
 const NPM = 'https://www.npmjs.com/package/wrapper-code';
+const CCR = 'https://github.com/musistudio/claude-code-router';
 
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const host = (url) => new URL(url).host;
@@ -78,18 +79,22 @@ export function renderSite({ catalog, version }) {
   ul.plain { list-style: none; margin: 0; padding: 0; }
   ul.plain li { margin: 0 0 4px; }
   ul.plain code { color: var(--yellow); }
+  .compare p { color: #c9c9d6; font-size: 15px; margin: 0 0 14px; }
+  .compare table { margin: 18px 0; }
+  .compare td:first-child { color: var(--muted); }
+  .compare th:nth-child(2), .compare td:nth-child(2) { border-left: 2px solid var(--magenta); }
   .how ol { padding-left: 20px; color: #c9c9d6; }
   .how li { margin-bottom: 6px; }
   footer { margin: 48px 0 32px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; text-align: center; }
   footer a { color: inherit; }
-  @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } table, thead, tbody, tr, td, th { display: block; } thead { display: none; } td { border-top: 0; padding: 4px 0; } tr { border-top: 1px solid var(--line); padding: 10px 0; } }
+  @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } table, thead, tbody, tr, td, th { display: block; } thead { display: none; } td { border-top: 0; padding: 4px 0; } tr { border-top: 1px solid var(--line); padding: 10px 0; } .compare td:first-child { color: var(--yellow); font-weight: 600; } .compare td:nth-child(2) { border-left: 0; } .compare td:nth-child(2)::before { content: "wrapper-code: "; color: var(--muted); } .compare td:nth-child(3)::before { content: "claude-code-router: "; color: var(--muted); } }
 </style>
 </head>
 <body>
 <div class="wrap">
   <nav>
     <a class="wordmark" href="#top" aria-label="wrapper-code">${renderSvg(wordmarkRows('WRAPPER-CODE'))}</a>
-    <div class="links"><a href="#install">Install</a><a href="#providers">Providers</a><a href="${REPO}" rel="noopener">GitHub</a><a href="${NPM}" rel="noopener">npm</a></div>
+    <div class="links"><a href="#install">Install</a><a href="#providers">Providers</a><a href="#compare">vs CCR</a><a href="${REPO}" rel="noopener">GitHub</a><a href="${NPM}" rel="noopener">npm</a></div>
   </nav>
 
   <section class="hero" id="top">
@@ -115,6 +120,34 @@ export function renderSite({ catalog, version }) {
 ${rows}
       </tbody>
     </table>
+  </section>
+
+  <section class="compare" id="compare">
+    <h2>wrapper-code vs claude-code-router</h2>
+    <p><a href="${CCR}" rel="noopener">claude-code-router</a> (CCR) is the best-known way to run Claude Code on other models, and for many setups it is the better tool. The two projects solve problems of different sizes. This comparison reflects CCR 3.1 (September 2026); check its repository for the current state.</p>
+    <p>CCR is a local gateway: a background service listens on <code>127.0.0.1:3456</code>, Claude Code (and Codex, Kimi CLI, OpenCode and other agents) is pointed at it, and the service decides per request which provider and model to call. That is where its features come from: routing rules, request rewrites, retries and ordered fallbacks, credential pools with key rotation, custom router scripts, translation to OpenAI- and Gemini-style APIs, vision or web search added to models that lack them, request logs with cost estimates, a management UI, a desktop app and Docker images.</p>
+    <p>wrapper-code is not a gateway. It builds an environment with the provider's <code>ANTHROPIC_BASE_URL</code>, key and model variables and starts <code>claude</code> with it. No process sits between Claude Code and the provider, so the provider has to speak the Anthropic Messages API itself. There is no routing, no fallback, no retry and no mixing of providers inside one session. What it does well is the narrow thing: <code>claude</code> on its own is never affected, nothing is written under <code>~/.claude</code>, sessions with different providers run side by side, and setup is one browser page.</p>
+    <table>
+      <thead><tr><th></th><th>wrapper-code</th><th>claude-code-router</th></tr></thead>
+      <tbody>
+        <tr><td>What it is</td><td>A launcher: sets environment variables for one <code>claude</code> process</td><td>A local gateway and management UI between agents and providers</td></tr>
+        <tr><td>In the request path</td><td>Nothing; Claude Code calls the provider directly</td><td>CCR's gateway on <code>127.0.0.1:3456</code></td></tr>
+        <tr><td>Providers</td><td>${providers.length} built in, all through their Anthropic-compatible endpoint</td><td>Many presets, plus any OpenAI-, Anthropic- or Gemini-compatible endpoint, translated by the gateway</td></tr>
+        <tr><td>Routing, fallbacks, retries, key rotation</td><td>No</td><td>Yes: rules, rewrites, ordered fallbacks, credential pools, custom scripts</td></tr>
+        <tr><td>Several providers in one session</td><td>No; one provider per session, different models per role</td><td>Yes</td></tr>
+        <tr><td>Vision, web search or MCP tools added to a model</td><td>No</td><td>Yes (Fusion, ToolHub)</td></tr>
+        <tr><td>Other agents (Codex, Kimi CLI, OpenCode...)</td><td>No, Claude Code only</td><td>Yes</td></tr>
+        <tr><td>Effect on plain <code>claude</code></td><td>None; <code>~/.claude</code> is untouched</td><td>None with the "only opened from CCR" scope; the "system default" scope makes CCR the default for Claude Code</td></tr>
+        <tr><td>Background service</td><td>None; the telemetry receiver lives and dies with the session</td><td>Yes: <code>ccr start</code> daemon or the desktop app</td></tr>
+        <tr><td>Configuration</td><td>One <code>KEY=value</code> file per provider</td><td>SQLite database, edited through the UI</td></tr>
+        <tr><td>Usage</td><td>Requests and tokens per session, provider and model, local, no prices</td><td>Request logs with latency, tokens and cost estimates</td></tr>
+        <tr><td>Requirements</td><td>Node.js 18+ and Claude Code</td><td>Node.js 22+ for the CLI, or the desktop app or Docker</td></tr>
+        <tr><td>Size and maturity</td><td>Small codebase, 0.x, one maintainer</td><td>Large project, 3.x, many contributors, far more widely used</td></tr>
+        <tr><td>License</td><td>MIT</td><td>MIT</td></tr>
+      </tbody>
+    </table>
+    <p>Choose CCR if you want to route per request, need fallbacks across providers or keys, want a provider that only speaks the OpenAI or Gemini API, or run other agents through the same gateway. Choose wrapper-code if you want one command that starts Claude Code on one provider, with no service to keep running and nothing changed for your normal Claude Code, and the provider's own Anthropic-compatible endpoint is enough.</p>
+    <p class="muted">Both can be installed at once. If a CCR profile is set as "system default", check that it did not add <code>ANTHROPIC_BASE_URL</code> to the <code>env</code> block of <code>~/.claude/settings.json</code>: settings there win over the variables wrapper-code sets.</p>
   </section>
 
   <section class="how">

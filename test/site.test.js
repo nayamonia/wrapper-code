@@ -28,6 +28,15 @@ test('renderSite builds a self-contained landing page from the brand, the catalo
   assert.match(html, /\.grid \{ display: grid; grid-template-columns: repeat\(2, 1fr\);/, 'cards in two columns');
   assert.match(html, /<h3>Side by side<\/h3><p>[^<]*several Claude Code sessions at the same time/, 'card about parallel sessions with different LLMs');
   assert.match(html, /v0\.1\.0/);
+  const compare = html.slice(html.indexOf('<section class="compare" id="compare">'), html.indexOf('<section class="how">'));
+  assert.ok(compare.length > 0, 'comparison section before "How it works"');
+  assert.match(compare, /<h2>wrapper-code vs claude-code-router<\/h2>/);
+  assert.match(compare, /href="https:\/\/github\.com\/musistudio\/claude-code-router"/, 'links to the CCR repository');
+  assert.match(compare, /for many setups it is the better tool/, 'states when CCR is the better choice');
+  assert.match(compare, /no routing, no fallback, no retry/, 'states what wrapper-code does not do');
+  assert.match(compare, new RegExp(`<td>${catalog.size} built in, all through their Anthropic-compatible endpoint</td>`), 'provider count follows the catalog');
+  assert.match(compare, /<th>wrapper-code<\/th><th>claude-code-router<\/th>/);
+  assert.match(html, /<a href="#compare">vs CCR<\/a>/, 'nav link to the comparison');
   for (const provider of catalog.values()) {
     assert.match(html, new RegExp(`<code>wrapper-code ${provider.id}</code>`), `install line for ${provider.id}`);
     assert.ok(html.includes(provider.name), `name of ${provider.id}`);
