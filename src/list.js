@@ -10,6 +10,7 @@ export function compareProviders(a, b) {
 
 // The same rule the launch uses to pick the env for the child.
 export function selectionOf(provider, values) {
+  if (provider.passthrough) return '';
   return provider.models ? values.WRAPPER_CODE_MODEL : (values.WRAPPER_CODE_PROFILE || provider.defaultProfile);
 }
 

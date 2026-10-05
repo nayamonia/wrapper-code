@@ -1,4 +1,4 @@
-import { mkdir, appendFile, readFile, chmod, stat, open } from 'node:fs/promises';
+import { mkdir, appendFile, readFile, writeFile, rename, rm, chmod, stat, open } from 'node:fs/promises';
 import path from 'node:path';
 import { configDir } from '../config.js';
 
@@ -62,4 +62,40 @@ export async function readUsage(opts) {
     }
   }
   return { events, skipped };
+}
+
+// Without a provider the whole file goes. With one, only the lines that parse and name that
+// provider go; anything else, malformed lines included, stays where it is.
+export async function clearUsage({ provider } = {}, opts) {
+  const file = usageFilePath(opts);
+  let text;
+  try {
+    text = await readFile(file, 'utf8');
+  } catch (err) {
+    if (err.code === 'ENOENT') return { removed: 0 };
+    throw err;
+  }
+  const kept = [];
+  let removed = 0;
+  for (const line of text.split('\n')) {
+    if (!line.trim()) continue;
+    let e = null;
+    try { e = JSON.parse(line); } catch { /* malformed */ }
+    if (provider ? e?.provider === provider : isUsageEvent(e)) removed += 1;
+    else if (provider) kept.push(line);
+  }
+  if (provider && !removed) return { removed };
+  if (!kept.length) {
+    await rm(file, { force: true });
+    return { removed };
+  }
+  const tmp = `${file}.${process.pid}.tmp`;
+  try {
+    await writeFile(tmp, `${kept.join('\n')}\n`, { mode: 0o600 });
+    await rename(tmp, file);
+  } catch (err) {
+    await rm(tmp, { force: true });
+    throw err;
+  }
+  return { removed };
 }

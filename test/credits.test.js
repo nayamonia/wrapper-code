@@ -25,3 +25,8 @@ test('launchBanner is one line with version, provider, profile, license, author 
   const line = launchBanner({ version: '0.1.0', providerName: 'DeepSeek', profileId: 'flash-1m' });
   assert.equal(line, 'wrapper-code 0.1.0 · DeepSeek (flash-1m) · MIT · by Gabriel Fernandes · cd2.com.br');
 });
+
+test('launchBanner leaves the parentheses out when there is no profile', () => {
+  const line = launchBanner({ version: '0.1.0', providerName: 'Claude Code', profileId: '' });
+  assert.equal(line, 'wrapper-code 0.1.0 · Claude Code · MIT · by Gabriel Fernandes · cd2.com.br');
+});

@@ -63,14 +63,14 @@
     <h1>Run Claude Code with any LLM</h1>
     <p class="lead">One command, your provider, zero changes to your Claude Code configuration. The provider's settings live only inside that session.</p>
     <div class="install" id="install"><span class="p">$</span> npm install -g wrapper-code<br><span class="p">$</span> wrapper-code deepseek</div>
-    <div class="chips"><span class="chip">Alibaba Token Plan</span><span class="chip">DeepSeek</span><span class="chip">Ollama</span><span class="chip">OpenRouter</span><span class="chip">Qwen Cloud</span></div>
+    <div class="chips"><span class="chip">Alibaba Token Plan</span><span class="chip">Claude Code</span><span class="chip">DeepSeek</span><span class="chip">Ollama</span><span class="chip">OpenRouter</span><span class="chip">Qwen Cloud</span></div>
   </section>
 
   <section class="grid">
     <div class="box"><h3>Isolated</h3><p>Only environment variables change, and only for that process. <code>claude</code> on its own keeps using Anthropic.</p></div>
     <div class="box"><h3>Side by side</h3><p>Run several Claude Code sessions at the same time on one computer, each with a different LLM: <code>wrapper-code deepseek</code> in one terminal, <code>wrapper-code qwencloud</code> in another, plain <code>claude</code> in a third.</p></div>
     <div class="box"><h3>Setup in the browser</h3><p>The first launch opens a local page: paste the key, pick a model profile, and the key is tested before anything is saved.</p></div>
-    <div class="box"><h3>Token usage</h3><p>Every session records its requests and tokens locally and prints a short summary when Claude Code exits. <code>wrapper-code usage</code> adds them up by provider, model and day. Nothing leaves your machine.</p></div>
+    <div class="box"><h3>Token usage</h3><p>Every session records its requests and tokens locally and prints a short summary when Claude Code exits. <code>wrapper-code usage</code> adds them up by provider, model and day, and <code>wrapper-code usage clear</code> deletes them. Start your own Claude Code with <code>wrapper-code claude</code> and your Anthropic usage is counted too, with nothing else changed. Nothing leaves your machine.</p></div>
   </section>
 
   <section id="providers">
@@ -83,6 +83,12 @@
   <td><strong>Alibaba Token Plan</strong><div class="muted">Token Plan API key</div></td>
   <td><ul class="plain"><li><code>qwen-max</code> Qwen 3.8 Max as main model, Qwen 3.8 Flash for subagents</li><li><code>qwen-plus</code> Qwen 3.7 Plus for every role</li><li><code>deepseek-pro</code> DeepSeek V4 Pro as main model, DeepSeek V4.1 Flash for subagents</li><li><code>glm</code> GLM 5.3 for every role</li></ul></td>
   <td><a href="https://www.alibabacloud.com/help/en/model-studio/claude-code" rel="noopener">docs</a></td>
+</tr>
+<tr>
+  <td><code>wrapper-code claude</code></td>
+  <td><strong>Claude Code</strong><div class="muted">Your own Claude Code login</div></td>
+  <td><ul class="plain"><li>Your normal models and settings; only token usage is recorded</li></ul></td>
+  <td><a href="https://code.claude.com/docs/en/monitoring-usage" rel="noopener">docs</a></td>
 </tr>
 <tr>
   <td><code>wrapper-code deepseek</code></td>
@@ -123,7 +129,7 @@
       <li><strong>Plain <code>claude</code> cannot be hijacked.</strong> Nothing is written under <code>~/.claude</code>, and there is no "system default" mode, so no setting could make your normal Claude Code talk to another backend. CCR has such a scope; its own guide recommends starting with "only opened from CCR" for the same reason.</li>
       <li><strong>Side by side.</strong> Each session carries its own environment, so <code>wrapper-code deepseek</code>, <code>wrapper-code ollama</code> and plain <code>claude</code> can run at the same time in three terminals.</li>
       <li><strong>The provider's integration, unchanged.</strong> Each provider definition follows the provider's published Claude Code setup (linked in the table above), and what reaches Claude Code is what the provider's endpoint sends: streaming, tool calls, caching and thinking as the provider implements them, with no translation layer in between.</li>
-      <li><strong>Small and readable.</strong> One npm package with no runtime dependencies (25 files, about 100 kB, Node.js 18+). The whole configuration is one environment file per provider that you can <code>cat</code>; export the same variables by hand and you get the same session, with or without wrapper-code.</li>
+      <li><strong>Small and readable.</strong> One npm package with no runtime dependencies (27 files, about 100 kB, Node.js 18+). The whole configuration is one environment file per provider that you can <code>cat</code>; export the same variables by hand and you get the same session, with or without wrapper-code.</li>
     </ul>
     <p>What wrapper-code does not do, by design: per-request routing, fallbacks, retries, key rotation, several providers in one session, protocol translation (the provider must speak the Anthropic Messages API), other agents than Claude Code. This reflects CCR 3.1 and its documentation (September 2026); check its repository for the current state.</p>
     <p class="muted">Both can be installed at once. If a CCR profile is set as "system default", check that it did not add <code>ANTHROPIC_BASE_URL</code> to the <code>env</code> block of <code>~/.claude/settings.json</code>: settings there win over the variables wrapper-code sets.</p>
@@ -135,8 +141,10 @@
       <li>Reads the provider definition: base URL, model variables, how to test a key.</li>
       <li>Reads your saved choices; runs the setup page if the key is missing.</li>
       <li>Builds an environment from your shell, the provider and your profile. <code>ANTHROPIC_API_KEY</code> is removed so Claude Code cannot fall back to Anthropic.</li>
+      <li>Starts a small receiver on <code>127.0.0.1</code> for Claude Code's own token counts, which become the usage report.</li>
       <li>Finds <code>claude</code> on your PATH and runs it with that environment, forwarding your arguments and its exit code.</li>
     </ol>
+    <p><code>wrapper-code claude</code> is the exception: it skips the first three steps and runs your own Claude Code with your environment as it is, only adding the receiver.</p>
     <p class="muted">Requires Node.js 18+ and Claude Code. Works on macOS, Linux and Windows. Version v0.2.0.</p>
   </section>
 

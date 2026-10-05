@@ -14,5 +14,5 @@ export function creditLine() {
 }
 
 export function launchBanner({ version, providerName, profileId }) {
-  return `wrapper-code ${version} · ${providerName} (${profileId}) · ${CREDITS.license} · by ${CREDITS.name} · ${host(CREDITS.site)}`;
+  return `wrapper-code ${version} · ${providerName}${profileId ? ` (${profileId})` : ''} · ${CREDITS.license} · by ${CREDITS.name} · ${host(CREDITS.site)}`;
 }

@@ -18,8 +18,10 @@ const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 const host = (url) => new URL(url).host;
 
 function providerRow(p) {
-  const setup = p.credential ? esc(p.credential.label) : 'No key';
-  const choices = p.profiles
+  const setup = p.passthrough ? 'Your own Claude Code login' : p.credential ? esc(p.credential.label) : 'No key';
+  const choices = p.passthrough
+    ? '<li>Your normal models and settings; only token usage is recorded</li>'
+    : p.profiles
     ? Object.entries(p.profiles).map(([id, prof]) => `<li><code>${esc(id)}</code> ${esc(prof.label)}</li>`).join('')
     : p.credential
       ? '<li>Any model with tool calling, picked from the live catalog at setup time</li>'
@@ -109,7 +111,7 @@ export function renderSite({ catalog, version }) {
     <div class="box"><h3>Isolated</h3><p>Only environment variables change, and only for that process. <code>claude</code> on its own keeps using Anthropic.</p></div>
     <div class="box"><h3>Side by side</h3><p>Run several Claude Code sessions at the same time on one computer, each with a different LLM: <code>wrapper-code deepseek</code> in one terminal, <code>wrapper-code qwencloud</code> in another, plain <code>claude</code> in a third.</p></div>
     <div class="box"><h3>Setup in the browser</h3><p>The first launch opens a local page: paste the key, pick a model profile, and the key is tested before anything is saved.</p></div>
-    <div class="box"><h3>Token usage</h3><p>Every session records its requests and tokens locally and prints a short summary when Claude Code exits. <code>wrapper-code usage</code> adds them up by provider, model and day. Nothing leaves your machine.</p></div>
+    <div class="box"><h3>Token usage</h3><p>Every session records its requests and tokens locally and prints a short summary when Claude Code exits. <code>wrapper-code usage</code> adds them up by provider, model and day, and <code>wrapper-code usage clear</code> deletes them. Start your own Claude Code with <code>wrapper-code claude</code> and your Anthropic usage is counted too, with nothing else changed. Nothing leaves your machine.</p></div>
   </section>
 
   <section id="providers">
@@ -133,7 +135,7 @@ ${rows}
       <li><strong>Plain <code>claude</code> cannot be hijacked.</strong> Nothing is written under <code>~/.claude</code>, and there is no "system default" mode, so no setting could make your normal Claude Code talk to another backend. CCR has such a scope; its own guide recommends starting with "only opened from CCR" for the same reason.</li>
       <li><strong>Side by side.</strong> Each session carries its own environment, so <code>wrapper-code deepseek</code>, <code>wrapper-code ollama</code> and plain <code>claude</code> can run at the same time in three terminals.</li>
       <li><strong>The provider's integration, unchanged.</strong> Each provider definition follows the provider's published Claude Code setup (linked in the table above), and what reaches Claude Code is what the provider's endpoint sends: streaming, tool calls, caching and thinking as the provider implements them, with no translation layer in between.</li>
-      <li><strong>Small and readable.</strong> One npm package with no runtime dependencies (25 files, about 100 kB, Node.js 18+). The whole configuration is one environment file per provider that you can <code>cat</code>; export the same variables by hand and you get the same session, with or without wrapper-code.</li>
+      <li><strong>Small and readable.</strong> One npm package with no runtime dependencies (27 files, about 100 kB, Node.js 18+). The whole configuration is one environment file per provider that you can <code>cat</code>; export the same variables by hand and you get the same session, with or without wrapper-code.</li>
     </ul>
     <p>What wrapper-code does not do, by design: per-request routing, fallbacks, retries, key rotation, several providers in one session, protocol translation (the provider must speak the Anthropic Messages API), other agents than Claude Code. This reflects CCR 3.1 and its documentation (September 2026); check its repository for the current state.</p>
     <p class="muted">Both can be installed at once. If a CCR profile is set as "system default", check that it did not add <code>ANTHROPIC_BASE_URL</code> to the <code>env</code> block of <code>~/.claude/settings.json</code>: settings there win over the variables wrapper-code sets.</p>
@@ -145,8 +147,10 @@ ${rows}
       <li>Reads the provider definition: base URL, model variables, how to test a key.</li>
       <li>Reads your saved choices; runs the setup page if the key is missing.</li>
       <li>Builds an environment from your shell, the provider and your profile. <code>ANTHROPIC_API_KEY</code> is removed so Claude Code cannot fall back to Anthropic.</li>
+      <li>Starts a small receiver on <code>127.0.0.1</code> for Claude Code's own token counts, which become the usage report.</li>
       <li>Finds <code>claude</code> on your PATH and runs it with that environment, forwarding your arguments and its exit code.</li>
     </ol>
+    <p><code>wrapper-code claude</code> is the exception: it skips the first three steps and runs your own Claude Code with your environment as it is, only adding the receiver.</p>
     <p class="muted">Requires Node.js 18+ and Claude Code. Works on macOS, Linux and Windows. Version v${esc(version)}.</p>
   </section>
 

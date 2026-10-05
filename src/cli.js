@@ -2,6 +2,7 @@ import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
+import { createInterface } from 'node:readline/promises';
 import { loadCatalog } from './catalog.js';
 import { readProviderEnv, writeProviderEnv, envFilePath, ConfigError } from './config.js';
 import { buildEnv, isConfigured } from './env.js';
@@ -24,10 +25,13 @@ Run Claude Code with another LLM provider, without touching your Claude Code con
 
 Usage:
   wrapper-code <provider> [claude args...]   Launch Claude Code with <provider> (opens setup first if needed)
+  wrapper-code claude [claude args...]       Launch your own Claude Code unchanged, only recording token usage
   wrapper-code setup <provider>              Open the setup page to change the key or model profile
   wrapper-code list                          List providers and whether they are configured
   wrapper-code usage [--since 24h|7d|30d|all] [--provider <id>] [--by-day] [--json]
                                              Token usage per provider and model
+  wrapper-code usage clear [--provider <id>] [--yes]
+                                             Delete the recorded usage, all of it or one provider's
   wrapper-code --help | --version
 
 Config files live in ~/.config/wrapper-code (POSIX) or %APPDATA%\\wrapper-code (Windows).
@@ -41,6 +45,17 @@ export function displayPath(file, homeDir) {
   if (file === base) return '~';
   const sep = file.startsWith(base + '/') ? '/' : file.startsWith(base + path.sep) ? path.sep : null;
   return sep ? `~${file.slice(base.length)}` : file;
+}
+
+// Resolves true or false, or null when there is no terminal to ask on.
+async function confirmOnTerminal(question) {
+  if (!process.stdin.isTTY) return null;
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    return /^y(es)?$/i.test((await rl.question(question)).trim());
+  } finally {
+    rl.close();
+  }
 }
 
 const INSTALL_HINT = 'claude not found on PATH. Install Claude Code: npm install -g @anthropic-ai/claude-code\n';
@@ -126,6 +141,7 @@ export async function main(argv, deps = {}) {
     sleepImpl,
     startUsageReceiverImpl = startUsageReceiver,
     nowImpl = Date.now,
+    confirmImpl = confirmOnTerminal,
   } = deps;
   const cfg = { platform, env, ...(home ? { home } : {}) };
   const setupDeps = { cfg, stdout, stderr, openBrowserImpl, startSetupServerImpl };
@@ -141,7 +157,7 @@ export async function main(argv, deps = {}) {
   }
 
   if (first === 'usage') {
-    return runUsage(rest, { cfg, stdout, stderr });
+    return runUsage(rest, { cfg, stdout, stderr, confirm: confirmImpl, display: (file) => displayPath(file, home || homedir()) });
   }
 
   const catalog = await catalogImpl();
@@ -158,10 +174,10 @@ export async function main(argv, deps = {}) {
       let status = 'not configured';
       let selection = '-';
       try {
-        const values = await readProviderEnv(provider.id, cfg);
+        const values = provider.passthrough ? {} : await readProviderEnv(provider.id, cfg);
         if (isConfigured(provider, values)) {
           status = 'configured';
-          selection = selectionOf(provider, values);
+          selection = selectionOf(provider, values) || '-';
         }
       } catch (err) {
         status = 'error';
@@ -179,6 +195,10 @@ export async function main(argv, deps = {}) {
     const id = (rest[0] || '').toLowerCase();
     const provider = catalog.get(id);
     if (!provider) return unknown(rest[0] || '(missing)');
+    if (provider.passthrough) {
+      stdout.write(`${provider.name} needs no setup: wrapper-code ${provider.id} runs it with your own configuration and only records token usage.\n`);
+      return 0;
+    }
     let current;
     try {
       current = await readProviderEnv(provider.id, cfg);
@@ -194,7 +214,7 @@ export async function main(argv, deps = {}) {
   const provider = catalog.get(first.toLowerCase());
   if (!provider) return unknown(first);
 
-  let values = await readProviderEnv(provider.id, cfg);
+  let values = provider.passthrough ? {} : await readProviderEnv(provider.id, cfg);
   if (!isConfigured(provider, values)) {
     stdout.write(`${provider.name} is not configured yet. Opening setup...\n`);
     const result = await runSetup(provider, values, setupDeps);

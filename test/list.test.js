@@ -46,3 +46,7 @@ test('selectionOf follows the launch rule: saved model, saved profile, or the de
   assert.equal(selectionOf(modeled, { WRAPPER_CODE_MODEL: 'qwen3-coder' }), 'qwen3-coder');
   assert.equal(selectionOf(modeled, {}), undefined);
 });
+
+test('selectionOf is empty for a passthrough provider', () => {
+  assert.equal(selectionOf({ passthrough: true }, { WRAPPER_CODE_PROFILE: 'x' }), '');
+});

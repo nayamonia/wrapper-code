@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseSince, aggregate, renderReport, runUsage } from '../src/usage/report.js';
-import { appendUsage, usageFilePath } from '../src/usage/store.js';
+import { appendUsage, usageFilePath, readUsage } from '../src/usage/store.js';
 import { appendFile } from 'node:fs/promises';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -98,4 +98,88 @@ test('runUsage survives a corrupt-but-valid-JSON line and counts it in the foote
   assert.equal(await runUsage(['--since', 'all'], { cfg, stdout, stderr: stdout, now: NOW }), 0);
   assert.match(c.join(''), /deepseek-flash/);
   assert.match(c.join(''), /1 malformed lines skipped/);
+});
+
+function sinkOf() {
+  const chunks = [];
+  return { write: (s) => { chunks.push(String(s)); return true; }, text: () => chunks.join('') };
+}
+
+async function seeded() {
+  const cfg = { platform: 'linux', env: {}, home: await mkdtemp(path.join(tmpdir(), 'wc-clear-')) };
+  await appendUsage(EVENTS, cfg);
+  return cfg;
+}
+
+test('usage clear asks first, names what goes, and removes everything on yes', async () => {
+  const cfg = await seeded();
+  const stdout = sinkOf();
+  const asked = [];
+  const code = await runUsage(['clear'], { cfg, stdout, stderr: sinkOf(), confirm: async (q) => { asked.push(q); return true; }, display: () => '~/usage.jsonl' });
+  assert.equal(code, 0);
+  assert.deepEqual(asked, ['This removes all 5 requests from ~/usage.jsonl. Continue? [y/N] ']);
+  assert.match(stdout.text(), /removed 5 requests\n$/);
+  assert.equal((await readUsage(cfg)).events.length, 0);
+});
+
+test('usage clear --provider removes only that provider', async () => {
+  const cfg = await seeded();
+  const stdout = sinkOf();
+  const asked = [];
+  for (const args of [['clear', '--provider', 'deepseek'], ['clear', '--provider=ollama']]) {
+    assert.equal(await runUsage(args, { cfg, stdout, stderr: sinkOf(), confirm: async (q) => { asked.push(q); return true; } }), 0);
+  }
+  assert.match(asked[0], /^This removes 3 requests \(deepseek\) from .*usage\.jsonl\. Continue\? \[y\/N\] $/);
+  assert.match(asked[1], /^This removes 1 request \(ollama\) from /);
+  assert.match(stdout.text(), /removed 3 requests \(deepseek\)\n/);
+  assert.match(stdout.text(), /removed 1 request \(ollama\)\n/);
+  assert.deepEqual((await readUsage(cfg)).events.map((e) => e.provider), ['qwencloud']);
+});
+
+test('usage clear answered no keeps the file and exits 1', async () => {
+  const cfg = await seeded();
+  const stdout = sinkOf();
+  assert.equal(await runUsage(['clear'], { cfg, stdout, stderr: sinkOf(), confirm: async () => false }), 1);
+  assert.match(stdout.text(), /nothing removed/);
+  assert.equal((await readUsage(cfg)).events.length, 5);
+});
+
+test('usage clear without a terminal refuses unless --yes is given', async () => {
+  const cfg = await seeded();
+  const stderr = sinkOf();
+  assert.equal(await runUsage(['clear'], { cfg, stdout: sinkOf(), stderr, confirm: async () => null }), 1);
+  assert.match(stderr.text(), /usage clear: not a terminal; pass --yes to remove without asking/);
+  assert.equal((await readUsage(cfg)).events.length, 5);
+  const stdout = sinkOf();
+  const never = async () => { throw new Error('must not ask'); };
+  assert.equal(await runUsage(['clear', '--yes', '--provider', 'deepseek'], { cfg, stdout, stderr: sinkOf(), confirm: never }), 0);
+  assert.match(stdout.text(), /removed 3 requests \(deepseek\)/);
+});
+
+test('usage clear with nothing to remove says so, asks nothing and exits 0', async () => {
+  const never = async () => { throw new Error('must not ask'); };
+  const empty = { platform: 'linux', env: {}, home: await mkdtemp(path.join(tmpdir(), 'wc-clear-')) };
+  const a = sinkOf();
+  assert.equal(await runUsage(['clear'], { cfg: empty, stdout: a, stderr: sinkOf(), confirm: never }), 0);
+  assert.match(a.text(), /no usage recorded yet; nothing to clear/);
+  const cfg = await seeded();
+  const b = sinkOf();
+  assert.equal(await runUsage(['clear', '--provider', 'ghost'], { cfg, stdout: b, stderr: sinkOf(), confirm: never }), 0);
+  assert.match(b.text(), /no usage recorded for ghost; nothing to clear/);
+});
+
+test('usage clear counts malformed lines in the question when clearing everything', async () => {
+  const cfg = await seeded();
+  await appendFile(usageFilePath(cfg), 'broken\n');
+  const asked = [];
+  await runUsage(['clear'], { cfg, stdout: sinkOf(), stderr: sinkOf(), confirm: async (q) => { asked.push(q); return true; } });
+  assert.match(asked[0], /^This removes all 5 requests and 1 malformed line from /);
+});
+
+test('usage clear rejects options it does not know', async () => {
+  const cfg = await seeded();
+  const stderr = sinkOf();
+  assert.equal(await runUsage(['clear', '--since', '7d'], { cfg, stdout: sinkOf(), stderr, confirm: async () => true }), 1);
+  assert.match(stderr.text(), /usage clear: unknown option --since/);
+  assert.equal((await readUsage(cfg)).events.length, 5);
 });
