@@ -32,14 +32,12 @@ test('renderSite builds a self-contained landing page from the brand, the catalo
   assert.ok(compare.length > 0, 'comparison section before "How it works"');
   assert.match(compare, /<h2>wrapper-code vs claude-code-router<\/h2>/);
   assert.match(compare, /href="https:\/\/github\.com\/musistudio\/claude-code-router"/, 'links to the CCR repository');
-  assert.match(compare, /for many setups it is the better tool/, 'states when CCR is the better choice');
-  assert.match(compare, /no routing, no fallback, no retry/, 'states what wrapper-code does not do');
-  assert.match(compare, new RegExp(`<td>${catalog.size} built in, all through their Anthropic-compatible endpoint</td>`), 'provider count follows the catalog');
-  assert.match(compare, /<th>wrapper-code<\/th><th>claude-code-router<\/th>/);
-  assert.doesNotMatch(compare, /Size and maturity/, 'no size-and-maturity row');
-  assert.match(compare, /<h3>Where wrapper-code is the better fit<\/h3>/);
+  assert.match(compare, /If you need any of that, use CCR\./, 'states when CCR is the right choice');
+  assert.match(compare, /wants to solve a smaller problem/, 'states the problem wrapper-code solves');
+  assert.match(compare, /What wrapper-code does not do, by design/, 'states what wrapper-code does not do');
   assert.match(compare, /wrapper-code never sees them/, 'prompts never pass through wrapper-code');
   assert.match(compare, /no runtime dependencies/, 'footprint claim');
+  assert.doesNotMatch(compare, /<table/, 'no comparison table');
   assert.match(html, /<a href="#compare">vs CCR<\/a>/, 'nav link to the comparison');
   for (const provider of catalog.values()) {
     assert.match(html, new RegExp(`<code>wrapper-code ${provider.id}</code>`), `install line for ${provider.id}`);

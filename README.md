@@ -76,41 +76,19 @@ Your global `~/.claude` (CLAUDE.md, skills, plugins, MCP servers, history) is sh
 
 ## wrapper-code vs claude-code-router
 
-[claude-code-router](https://github.com/musistudio/claude-code-router) (CCR) is the best-known way to run Claude Code on other models, and for many setups it is the better tool. The two projects solve problems of different sizes. This comparison reflects CCR 3.1 and its documentation (September 2026); check its repository for the current state.
+[claude-code-router](https://github.com/musistudio/claude-code-router) (CCR) is the best-known way to run Claude Code on other models. It is a local gateway: a background service on `127.0.0.1:3456` receives every request from Claude Code (and from Codex, Kimi CLI, OpenCode and other agents), decides per request which provider and model to call, and can rewrite, retry, fall back to another model or key, translate to OpenAI- and Gemini-style APIs, and add vision, web search or MCP tools to a model that lacks them. It has a management UI, request logs with cost estimates, a desktop app and Docker images. If you need any of that, use CCR.
 
-CCR is a local gateway. A background service listens on `127.0.0.1:3456`, Claude Code (and Codex, Kimi CLI, OpenCode and other agents) is pointed at it, and the service decides per request which provider and model to call. That is where its features come from: routing rules on headers and body, request rewrites, retries and ordered fallbacks, credential pools with key rotation, custom router scripts, translation to OpenAI- and Gemini-style APIs, "Fusion" (adding vision, web search or MCP tools to a model that lacks them), request logs with cost estimates, a management UI on `:3458`, a desktop app and Docker images. Configuration lives in a SQLite database under `~/.claude-code-router`. A Claude Code profile can be scoped to "only opened from CCR" or made the "system default".
-
-wrapper-code is not a gateway. It builds an environment with the provider's `ANTHROPIC_BASE_URL`, key and model variables and starts `claude` with it. No process sits between Claude Code and the provider, so the provider has to speak the Anthropic Messages API itself (DeepSeek, Ollama, Qwen Cloud, Alibaba Model Studio and OpenRouter do). There is no routing, no fallback, no retry, no key rotation and no mixing of providers inside one session: one session uses one provider, with the role models (main, Opus/Sonnet/Haiku, subagents) fixed by the profile.
-
-| | wrapper-code | claude-code-router |
-|---|---|---|
-| What it is | A launcher: sets environment variables for one `claude` process | A local gateway and management UI between agents and providers |
-| In the request path | Nothing; Claude Code calls the provider directly | CCR's gateway on `127.0.0.1:3456` |
-| Your prompts and the model's answers | Travel only between Claude Code and the provider; wrapper-code never sees them | Pass through the gateway; its request logs can keep request and response bodies |
-| Must be running | Nothing; when `claude` exits, nothing is left | The CCR service or desktop app, or Claude Code launched from it cannot reach a model |
-| Providers | 5 built in, all through their Anthropic-compatible endpoint | Many presets, plus any OpenAI-, Anthropic- or Gemini-compatible endpoint, translated by the gateway |
-| Per-request routing, fallbacks, retries, key rotation | No | Yes: rules, rewrites, ordered fallbacks, credential pools, custom scripts |
-| Several providers in one session | No; one provider per session, different models per role | Yes |
-| Add vision, web search or MCP tools to a model | No | Yes (Fusion, ToolHub) |
-| Other agents (Codex, Kimi CLI, OpenCode...) | No, Claude Code only | Yes |
-| Effect on plain `claude` | None, and there is no mode that could change it; `~/.claude` is untouched | None with the "only opened from CCR" scope; the "system default" scope changes the Claude Code you open directly |
-| Open ports | One loopback listener, random token, only while a session runs | Gateway on `3456` and management UI on `3458` while the service runs |
-| Configuration | One `KEY=value` file per provider, readable and editable by hand | SQLite database, edited through the UI |
-| Usage | Requests and tokens per session, provider and model, local, no prices | Request logs with latency, tokens and cost estimates |
-| Install | One npm package, no dependencies, about 100 kB; Node.js 18+ and Claude Code | npm CLI on Node.js 22+, or the desktop app or Docker |
-| License | MIT | MIT |
-
-Where wrapper-code is the better fit:
+wrapper-code wants to solve a smaller problem: start one Claude Code session on one other provider, with nothing changed for your normal Claude Code and nothing extra running. It sets the provider's `ANTHROPIC_BASE_URL`, key and model variables in the environment of one `claude` process and gets out of the way. That is the whole design, and it is where its advantages come from:
 
 - **Nothing between Claude Code and the model.** Requests go straight to the provider's endpoint. There is no local process to parse, rewrite and re-stream every request and response, and none that can be down. CCR's documentation lists its running service as a prerequisite for a Claude Code launched from it.
 - **Your prompts stay between Claude Code and the provider.** wrapper-code never sees them; the only thing it receives is Claude Code's own token counts, over a loopback port with a random per-session token. CCR's gateway sees every request, and its request logs store request and response bodies (configurable: all, errors only or none; kept for the current day).
 - **Nothing runs when you are not working.** No daemon, no desktop app, no database, no port left open. When `claude` exits, wrapper-code prints the usage block and exits too.
-- **Small.** One npm package with no runtime dependencies: 25 files, about 100 kB unpacked, Node.js 18+. Updating or removing it touches nothing else on the machine.
-- **Plain `claude` cannot be hijacked.** wrapper-code has no "system default" mode, so there is no setting that could make your normal Claude Code talk to another backend. CCR's own guide recommends starting with the "only opened from CCR" scope for the same reason.
+- **Plain `claude` cannot be hijacked.** Nothing is written under `~/.claude`, and there is no "system default" mode, so no setting could make your normal Claude Code talk to another backend. CCR has such a scope; its own guide recommends starting with "only opened from CCR" for the same reason.
+- **Side by side.** Each session carries its own environment, so `wrapper-code deepseek`, `wrapper-code ollama` and plain `claude` can run at the same time in three terminals.
 - **The provider's integration, unchanged.** Each provider definition follows the provider's published Claude Code setup (linked in the Providers table), and what reaches Claude Code is what the provider's endpoint sends: streaming, tool calls, caching and thinking as the provider implements them, with no translation layer in between.
-- **Readable and reproducible.** The whole configuration is one environment file you can `cat`. Export the same variables by hand and you get the same session, with or without wrapper-code.
+- **Small and readable.** One npm package with no runtime dependencies (25 files, about 100 kB, Node.js 18+). The whole configuration is one environment file per provider that you can `cat`; export the same variables by hand and you get the same session, with or without wrapper-code.
 
-Choose CCR if you want to route per request (a cheap model for background tasks, a long-context model when the conversation grows), need fallbacks across providers or keys, want a provider that only speaks the OpenAI or Gemini API, or run other agents through the same gateway. Choose wrapper-code if you want one command that starts Claude Code on one provider, with no service to keep running and nothing changed for your normal Claude Code, and the provider's own Anthropic-compatible endpoint is enough.
+What wrapper-code does not do, by design: per-request routing, fallbacks, retries, key rotation, several providers in one session, protocol translation (the provider must speak the Anthropic Messages API), other agents than Claude Code. This reflects CCR 3.1 and its documentation (September 2026); check its repository for the current state.
 
 Both can be installed at once. wrapper-code does not know about CCR; if a CCR profile is set as "system default", check that it did not add `ANTHROPIC_BASE_URL` to the `env` block of `~/.claude/settings.json`, because settings there win over the variables wrapper-code sets (see Notes).
 
