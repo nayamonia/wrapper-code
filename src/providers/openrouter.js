@@ -5,6 +5,8 @@
 export default {
   id: 'openrouter',
   name: 'OpenRouter',
+  family: 'gateway',
+  billing: 'payg',
   docs: 'https://openrouter.ai/docs/guides/guides/claude-code-integration',
   credential: {
     env: 'ANTHROPIC_AUTH_TOKEN',

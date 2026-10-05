@@ -15,6 +15,7 @@ import { startUsageReceiver, TOKEN_HEADER as USAGE_TOKEN_HEADER } from './usage/
 import { appendUsage, usageFilePath } from './usage/store.js';
 import { renderSummary } from './usage/summary.js';
 import { supportsTruecolor } from './brand.js';
+import { compareProviders, selectionOf, formatTable } from './list.js';
 
 const pkg = createRequire(import.meta.url)('../package.json');
 
@@ -151,19 +152,27 @@ export async function main(argv, deps = {}) {
   };
 
   if (first === 'list') {
-    let failed = false;
-    for (const provider of catalog.values()) {
-      let status;
+    const rows = [['FAMILY', 'PROVIDER', 'BILLING', 'STATUS', 'SELECTION']];
+    const errors = [];
+    for (const provider of [...catalog.values()].sort(compareProviders)) {
+      let status = 'not configured';
+      let selection = '-';
       try {
         const values = await readProviderEnv(provider.id, cfg);
-        status = isConfigured(provider, values) ? 'configured' : 'not configured';
+        if (isConfigured(provider, values)) {
+          status = 'configured';
+          selection = selectionOf(provider, values);
+        }
       } catch (err) {
-        failed = true;
-        status = `error: ${err.message}`;
+        status = 'error';
+        errors.push(err.message);
       }
-      stdout.write(`${provider.id.padEnd(12)} ${provider.name.padEnd(12)} ${status}\n`);
+      rows.push([provider.family, provider.id, provider.billing, status, selection]);
     }
-    return failed ? 1 : 0;
+    stdout.write(formatTable(rows));
+    // Full messages after the table, so an error never breaks the column alignment.
+    for (const message of errors) stderr.write(`wrapper-code: ${message}\n`);
+    return errors.length ? 1 : 0;
   }
 
   if (first === 'setup') {
@@ -199,7 +208,7 @@ export async function main(argv, deps = {}) {
     stderr.write(INSTALL_HINT);
     return 1;
   }
-  const selection = provider.models ? values.WRAPPER_CODE_MODEL : (values.WRAPPER_CODE_PROFILE || provider.defaultProfile);
+  const selection = selectionOf(provider, values);
 
   // Usage telemetry: a local OTLP receiver for this session.
   let receiver = null;

@@ -27,7 +27,18 @@ wrapper-code alibaba               # launch Claude Code with the Alibaba Token P
 wrapper-code openrouter            # launch Claude Code with any OpenRouter model (OpenAI, Google, Meta, Mistral, xAI...)
 wrapper-code deepseek --resume     # anything after the provider is passed to claude
 wrapper-code setup deepseek        # change the API key or model profile
-wrapper-code list                  # providers and whether they are configured
+wrapper-code list                  # providers by family: billing, status and the selected profile or model
+```
+
+`wrapper-code list` groups providers of the same family and shows how each one bills (`plan`, `payg` or `local`):
+
+```
+FAMILY    PROVIDER    BILLING  STATUS          SELECTION
+deepseek  deepseek    payg     configured      flash-1m
+gateway   openrouter  payg     not configured  -
+local     ollama      local    configured      qwen3-coder
+qwen      alibaba     plan     configured      qwen-max
+qwen      qwencloud   payg     not configured  -
 ```
 
 The first time you launch a provider, a setup page opens in your browser on `127.0.0.1`. Paste your API key, pick a model profile, click **Test and save**. The key is checked against the provider's API before anything is written. Then the session starts right away.

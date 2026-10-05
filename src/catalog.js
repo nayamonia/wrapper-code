@@ -1,6 +1,9 @@
 import { readdir } from 'node:fs/promises';
 
 const PROVIDERS_DIR = new URL('./providers/', import.meta.url);
+// Order matters: list sorts a family's providers in this order.
+export const BILLINGS = ['plan', 'payg', 'local'];
+const FAMILY_RE = /^[a-z0-9-]+$/;
 
 function isObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -11,6 +14,12 @@ export function validateProvider(provider) {
   if (typeof provider.id !== 'string' || !provider.id) throw new Error('provider.id must be a non-empty string');
   const where = `provider "${provider.id}"`;
   if (typeof provider.name !== 'string' || !provider.name) throw new Error(`${where}: name is required`);
+  if (typeof provider.family !== 'string' || !FAMILY_RE.test(provider.family)) {
+    throw new Error(`${where}: family must be lowercase letters, digits and dashes`);
+  }
+  if (!BILLINGS.includes(provider.billing)) {
+    throw new Error(`${where}: billing must be one of ${BILLINGS.join(', ')}`);
+  }
   if (!isObject(provider.env)) throw new Error(`${where}: env must be an object`);
   const hasProfiles = provider.profiles !== undefined;
   const hasModels = provider.models !== undefined;

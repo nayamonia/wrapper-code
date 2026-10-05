@@ -4,6 +4,8 @@
 export default {
   id: 'qwencloud',
   name: 'Qwen Cloud',
+  family: 'qwen',
+  billing: 'payg',
   docs: 'https://docs.qwencloud.com/developer-guides/clients-and-developer-tools/claude-code',
   credential: {
     env: 'ANTHROPIC_AUTH_TOKEN',

@@ -2,6 +2,8 @@
 export default {
   id: 'deepseek',
   name: 'DeepSeek',
+  family: 'deepseek',
+  billing: 'payg',
   docs: 'https://api-docs.deepseek.com/quick_start/agent_integrations/claude_code/',
   credential: {
     env: 'ANTHROPIC_AUTH_TOKEN',
