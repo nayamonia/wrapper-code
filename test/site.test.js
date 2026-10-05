@@ -36,6 +36,10 @@ test('renderSite builds a self-contained landing page from the brand, the catalo
   assert.match(compare, /no routing, no fallback, no retry/, 'states what wrapper-code does not do');
   assert.match(compare, new RegExp(`<td>${catalog.size} built in, all through their Anthropic-compatible endpoint</td>`), 'provider count follows the catalog');
   assert.match(compare, /<th>wrapper-code<\/th><th>claude-code-router<\/th>/);
+  assert.doesNotMatch(compare, /Size and maturity/, 'no size-and-maturity row');
+  assert.match(compare, /<h3>Where wrapper-code is the better fit<\/h3>/);
+  assert.match(compare, /wrapper-code never sees them/, 'prompts never pass through wrapper-code');
+  assert.match(compare, /no runtime dependencies/, 'footprint claim');
   assert.match(html, /<a href="#compare">vs CCR<\/a>/, 'nav link to the comparison');
   for (const provider of catalog.values()) {
     assert.match(html, new RegExp(`<code>wrapper-code ${provider.id}</code>`), `install line for ${provider.id}`);
