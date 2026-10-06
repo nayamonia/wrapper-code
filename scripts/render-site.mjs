@@ -68,6 +68,9 @@ export function renderSite({ catalog, version }) {
   .install .p { color: var(--muted); }
   .chips { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin: 22px 0 0; }
   .chip { border: 1px solid var(--cyan); color: var(--cyan); padding: 3px 10px; font: 600 12px/1.6 ui-monospace, Menlo, Consolas, monospace; letter-spacing: .08em; }
+  .demo { margin: 40px 0 8px; }
+  .demo img { display: block; width: 100%; height: auto; border: 2px solid var(--ink); box-shadow: 4px 4px 0 var(--magenta); background: var(--card); }
+  .demo p { color: #c9c9d6; font-size: 14px; margin: 12px 0 0; }
   .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin: 40px 0; }
   .box { background: var(--card); border: 1px solid var(--line); padding: 16px; }
   .box h3 { margin: 0 0 6px; color: var(--yellow); font-size: 15px; }
@@ -96,7 +99,7 @@ export function renderSite({ catalog, version }) {
 <div class="wrap">
   <nav>
     <a class="wordmark" href="#top" aria-label="wrapper-code">${renderSvg(wordmarkRows('WRAPPER-CODE'))}</a>
-    <div class="links"><a href="#install">Install</a><a href="#providers">Providers</a><a href="#compare">vs CCR</a><a href="${REPO}" rel="noopener">GitHub</a><a href="${NPM}" rel="noopener">npm</a></div>
+    <div class="links"><a href="#install">Install</a><a href="#demo">Demo</a><a href="#providers">Providers</a><a href="#compare">vs CCR</a><a href="${REPO}" rel="noopener">GitHub</a><a href="${NPM}" rel="noopener">npm</a></div>
   </nav>
 
   <section class="hero" id="top">
@@ -105,6 +108,12 @@ export function renderSite({ catalog, version }) {
     <p class="lead">One command, your provider, zero changes to your Claude Code configuration. The provider's settings live only inside that session.</p>
     <div class="install" id="install"><span class="p">$</span> npm install -g wrapper-code<br><span class="p">$</span> wrapper-code ${esc(exampleId)}</div>
     <div class="chips">${chips}</div>
+  </section>
+
+  <section class="demo" id="demo">
+    <h2>Demo</h2>
+    <img src="demo.gif" alt="Two terminals side by side: plain claude on the left, wrapper-code deepseek on the right, running the same prompt; then wrapper-code usage prints the tokens of each session." loading="lazy">
+    <p>Left: plain <code>claude</code>, talking to Anthropic. Right: <code>wrapper-code deepseek</code>, the same Claude Code talking to DeepSeek. Both get the same prompt. At the end, <code>wrapper-code usage</code> shows the requests and tokens of the DeepSeek session, recorded locally.</p>
   </section>
 
   <section class="grid">

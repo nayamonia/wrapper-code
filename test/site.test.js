@@ -39,6 +39,11 @@ test('renderSite builds a self-contained landing page from the brand, the catalo
   assert.match(compare, /no runtime dependencies/, 'footprint claim');
   assert.doesNotMatch(compare, /<table/, 'no comparison table');
   assert.match(html, /<a href="#compare">vs CCR<\/a>/, 'nav link to the comparison');
+  const demo = html.slice(html.indexOf('<section class="demo" id="demo">'), html.indexOf('<section class="grid">'));
+  assert.ok(demo.length > 0, 'demo section between the hero and the cards');
+  assert.match(demo, /<img src="demo\.gif" alt="[^"]+" loading="lazy">/, 'demo gif served next to the page, with alt text');
+  assert.match(demo, /<code>wrapper-code usage<\/code>/, 'caption mentions the usage report');
+  assert.match(html, /<a href="#demo">Demo<\/a>/, 'nav link to the demo');
   for (const provider of catalog.values()) {
     assert.match(html, new RegExp(`<code>wrapper-code ${provider.id}</code>`), `install line for ${provider.id}`);
     assert.ok(html.includes(provider.name), `name of ${provider.id}`);
