@@ -8,6 +8,10 @@ Website: [nayamonia.github.io/wrapper-code](https://nayamonia.github.io/wrapper-
 
 Every session records its token usage on your machine, and `wrapper-code usage` adds it up by provider and model. `wrapper-code claude` starts your own Claude Code unchanged, so your Anthropic usage is counted in the same report.
 
+![The same prompt in two terminals: wrapper-code claude on the left, wrapper-code deepseek on the right; then wrapper-code usage lists the requests and tokens of both](https://nayamonia.github.io/wrapper-code/demo.gif)
+
+*The same prompt in two terminals: `wrapper-code claude` on the left, `wrapper-code deepseek` on the right. When both finish, `wrapper-code usage` shows the requests and tokens of each one.*
+
 ## Install
 
 Requires Node.js 18+ and Claude Code (`npm install -g @anthropic-ai/claude-code`).
