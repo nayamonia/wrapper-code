@@ -68,6 +68,9 @@ export function renderSite({ catalog, version }) {
   .install .p { color: var(--muted); }
   .chips { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin: 22px 0 0; }
   .chip { border: 1px solid var(--cyan); color: var(--cyan); padding: 3px 10px; font: 600 12px/1.6 ui-monospace, Menlo, Consolas, monospace; letter-spacing: .08em; }
+  .demo { margin: 36px 0 0; text-align: center; }
+  .demo img { display: block; width: 100%; height: auto; border: 2px solid var(--ink); box-shadow: 4px 4px 0 var(--cyan); }
+  .demo p { color: var(--muted); font-size: 14px; margin: 14px auto 0; max-width: 720px; }
   .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin: 40px 0; }
   .box { background: var(--card); border: 1px solid var(--line); padding: 16px; }
   .box h3 { margin: 0 0 6px; color: var(--yellow); font-size: 15px; }
@@ -105,6 +108,11 @@ export function renderSite({ catalog, version }) {
     <p class="lead">One command, your provider, zero changes to your Claude Code configuration. The provider's settings live only inside that session.</p>
     <div class="install" id="install"><span class="p">$</span> npm install -g wrapper-code<br><span class="p">$</span> wrapper-code ${esc(exampleId)}</div>
     <div class="chips">${chips}</div>
+  </section>
+
+  <section class="demo" id="demo">
+    <img src="demo.gif" width="1600" height="900" alt="Two terminals side by side run the same prompt: wrapper-code claude on the left, wrapper-code deepseek on the right. Then wrapper-code usage lists the requests and tokens of both." loading="lazy">
+    <p>The same prompt in two terminals: <code>wrapper-code claude</code> on the left, <code>wrapper-code deepseek</code> on the right. When both finish, <code>wrapper-code usage</code> shows the requests and tokens of each one, by model.</p>
   </section>
 
   <section class="grid">

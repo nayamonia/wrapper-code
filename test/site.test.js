@@ -103,3 +103,11 @@ test('renderSite mentions usage clear and the claude passthrough in the usage ca
   const how = html.slice(html.indexOf('<h2>How it works</h2>'));
   assert.match(how, /<code>wrapper-code claude<\/code> is the exception/);
 });
+
+test('renderSite shows the demo GIF between the hero and the cards, served from the docs folder', async () => {
+  const html = renderSite({ catalog: await loadCatalog(), version: '0.1.0' });
+  const demo = html.indexOf('<section class="demo" id="demo">');
+  assert.ok(demo > html.indexOf('<section class="hero"') && demo < html.indexOf('<section class="grid">'), 'position');
+  assert.match(html, /<img src="demo\.gif" width="1600" height="900" alt="[^"]*wrapper-code claude[^"]*wrapper-code deepseek[^"]*" loading="lazy">/);
+  assert.match(html, /<section class="demo"[^]*?<code>wrapper-code usage<\/code>/);
+});
