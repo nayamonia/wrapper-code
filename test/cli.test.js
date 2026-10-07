@@ -400,17 +400,17 @@ process.exit(0);
   assert.deepEqual(seen.argv, ['--resume']);
   assert.equal(seen.env.ANTHROPIC_BASE_URL, 'https://maas.qwencloudapi.com/apps/anthropic');
   assert.equal(seen.env.ANTHROPIC_AUTH_TOKEN, 'sk-qc-e2e');
-  assert.equal(seen.env.ANTHROPIC_MODEL, 'auto');
+  assert.equal(seen.env.ANTHROPIC_MODEL, 'qwen3.8-max');
   assert.equal(seen.env.ANTHROPIC_DEFAULT_HAIKU_MODEL, 'qwen3.6-flash');
   assert.equal(seen.env.ANTHROPIC_DEFAULT_SONNET_MODEL, 'qwen3.8-flash');
   assert.equal(seen.env.ANTHROPIC_DEFAULT_OPUS_MODEL, 'qwen3.8-max');
-  assert.equal(seen.env.CLAUDE_CODE_SUBAGENT_MODEL, 'auto');
+  assert.equal(seen.env.CLAUDE_CODE_SUBAGENT_MODEL, 'qwen3.8-flash');
   assert.equal(seen.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS, '983616');
   assert.equal('ANTHROPIC_API_KEY' in seen.env, false);
   assert.equal('WRAPPER_CODE_PROFILE' in seen.env, false);
 });
 
-test('end-to-end: alibaba launches a fake claude with the Token Plan env', { skip: isWin }, async () => {
+test('end-to-end: qwencloud-token launches a fake claude with the Token Plan env', { skip: isWin }, async () => {
   const home = await tmp();
   const binDir = path.join(home, 'fakebin');
   await mkdir(binDir);
@@ -421,7 +421,7 @@ require('fs').writeFileSync(process.env.FAKE_OUT, JSON.stringify({ argv: process
 process.exit(0);
 `);
   await chmod(fake, 0o755);
-  await writeProviderEnv('alibaba', { ANTHROPIC_AUTH_TOKEN: 'tp-e2e', WRAPPER_CODE_PROFILE: 'deepseek-pro' }, { platform: 'linux', env: {}, home });
+  await writeProviderEnv('qwencloud-token', { ANTHROPIC_AUTH_TOKEN: 'tp-e2e', WRAPPER_CODE_PROFILE: 'deepseek-pro' }, { platform: 'linux', env: {}, home });
   const env = {
     ...shellEnv(),
     WRAPPER_CODE_NO_USAGE: '1',
@@ -430,10 +430,10 @@ process.exit(0);
     PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
     FAKE_OUT: out,
   };
-  const result = await run(['alibaba'], env);
+  const result = await run(['qwencloud-token'], env);
   assert.equal(result.code, 0, result.stderr);
   const seen = JSON.parse(await readFile(out, 'utf8'));
-  assert.equal(seen.env.ANTHROPIC_BASE_URL, 'https://token-plan.ap-southeast-1.maas.aliyuncs.com/apps/anthropic');
+  assert.equal(seen.env.ANTHROPIC_BASE_URL, 'https://token-plan.maas.qwencloudapi.com/apps/anthropic');
   assert.equal(seen.env.ANTHROPIC_AUTH_TOKEN, 'tp-e2e');
   assert.equal(seen.env.ANTHROPIC_MODEL, 'deepseek-v4-pro');
   assert.equal(seen.env.CLAUDE_CODE_SUBAGENT_MODEL, 'deepseek-v4.1-flash');
@@ -444,7 +444,7 @@ test('the retired ids qwen and alibaba-token are unknown and the message lists t
     const stderr = sink();
     const code = await main([old], { stdout: sink(), stderr, platform: 'linux', env: {}, home: await tmp() });
     assert.equal(code, 1);
-    assert.match(stderr.text(), new RegExp(`Unknown provider "${old}"\\. Available: alibaba, claude, deepseek, ollama, openrouter, qwencloud`));
+    assert.match(stderr.text(), new RegExp(`Unknown provider "${old}"\\. Available: claude, deepseek, ollama, openrouter, qwencloud-token, qwencloud`));
   }
 });
 
@@ -458,7 +458,7 @@ test('stale qwen.env and alibaba-token.env files are ignored by list and by othe
   assert.equal(await main(['list'], { stdout: out, stderr: sink(), ...opts }), 0);
   assert.match(out.text(), /deepseek\s+deepseek\s+payg\s+configured\s+flash-1m/);
   assert.match(out.text(), /qwen\s+qwencloud\s+payg\s+not configured/);
-  assert.match(out.text(), /qwen\s+alibaba\s+plan\s+not configured/);
+  assert.match(out.text(), /qwen\s+qwencloud-token\s+plan\s+not configured/);
   assert.doesNotMatch(out.text(), /old-cp|old-tp/);
   const launched = [];
   assert.equal(await main(['deepseek'], { stdout: sink(), stderr: sink(), ...opts, resolveClaudeImpl: () => '/c', launchImpl: async (o) => { launched.push(o); return { code: 0 }; } }), 0);
@@ -871,7 +871,7 @@ test('list groups the real catalog by family, plan before payg', async () => {
     'deepseek deepseek payg',
     'gateway openrouter payg',
     'local ollama local',
-    'qwen alibaba plan',
+    'qwen qwencloud-token plan',
     'qwen qwencloud payg',
   ]);
 });
