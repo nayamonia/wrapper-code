@@ -217,7 +217,7 @@ test('help texts no longer mention the Coding Plan or the old ids', async () => 
   assert.doesNotMatch(token, /Coding Plan|wrapper-code qwen\b|alibaba-token/);
   const qwencloud = catalog.get('qwencloud').credential.help;
   assert.doesNotMatch(qwencloud, /Coding Plan|alibaba-token/);
-  assert.deepEqual([...catalog.keys()].sort(), ['claude', 'deepseek', 'kimi', 'ollama', 'openrouter', 'qwencloud', 'qwencloud-token']);
+  assert.deepEqual([...catalog.keys()].sort(), ['claude', 'deepseek', 'kimi', 'kimi-code', 'ollama', 'openrouter', 'qwencloud', 'qwencloud-token']);
 });
 
 test('validateProvider accepts models.format ollama/openrouter and models.emptyHint, rejects other formats', () => {
@@ -281,6 +281,7 @@ test('catalog family and billing per provider', async () => {
     claude: 'anthropic/plan',
     deepseek: 'deepseek/payg',
     kimi: 'kimi/payg',
+    'kimi-code': 'kimi/plan',
     ollama: 'local/local',
     openrouter: 'gateway/payg',
     qwencloud: 'qwen/payg',
@@ -376,4 +377,38 @@ test('loadCatalog loads kimi with the Moonshot guide values', async () => {
   assert.match(km.profiles['k2.7-code'].label, /thinking/i, 'label warns that K2.7 Code needs thinking on');
   assert.deepEqual(km.test, { method: 'GET', url: 'https://api.moonshot.ai/v1/models', auth: 'bearer' });
   assert.equal(km.editableBaseUrl, false);
+});
+
+const sameModel = (model, window) => ({
+  ANTHROPIC_MODEL: model,
+  ANTHROPIC_DEFAULT_OPUS_MODEL: model,
+  ANTHROPIC_DEFAULT_SONNET_MODEL: model,
+  ANTHROPIC_DEFAULT_HAIKU_MODEL: model,
+  ANTHROPIC_DEFAULT_FABLE_MODEL: model,
+  CLAUDE_CODE_SUBAGENT_MODEL: model,
+  CLAUDE_CODE_AUTO_COMPACT_WINDOW: window,
+  CLAUDE_CODE_MAX_CONTEXT_TOKENS: window,
+});
+
+test('loadCatalog loads kimi-code with the Kimi Code guide values', async () => {
+  const catalog = await loadCatalog();
+  const kc = catalog.get('kimi-code');
+  assert.ok(kc, 'kimi-code provider present');
+  assert.equal(kc.name, 'Kimi Code');
+  assert.equal(kc.family, 'kimi');
+  assert.equal(kc.billing, 'plan');
+  assert.equal(kc.docs, 'https://www.kimi.com/code/docs/en/third-party-tools/claude-code.html');
+  assert.equal(kc.credential.env, 'ANTHROPIC_AUTH_TOKEN');
+  assert.match(kc.credential.label, /Kimi Code API key/);
+  assert.match(kc.credential.help, /wrapper-code kimi\b/);
+  assert.deepEqual(kc.env, {
+    ANTHROPIC_BASE_URL: 'https://api.kimi.com/coding',
+    CLAUDE_CODE_EFFORT_LEVEL: 'high',
+  });
+  assert.deepEqual(Object.keys(kc.profiles), ['k3-1m', 'k3-256k']);
+  assert.equal(kc.defaultProfile, 'k3-1m');
+  assert.deepEqual(kc.profiles['k3-1m'].env, sameModel('k3[1m]', '1048576'));
+  assert.deepEqual(kc.profiles['k3-256k'].env, sameModel('k3-256k', '262144'));
+  assert.deepEqual(kc.test, { method: 'GET', path: '/v1/models', auth: 'bearer' });
+  assert.equal(kc.editableBaseUrl, false);
 });
