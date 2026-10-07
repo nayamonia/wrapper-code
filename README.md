@@ -31,6 +31,8 @@ wrapper-code ollama --model gemma3 # use another main model for this session onl
 wrapper-code qwencloud             # launch Claude Code with Qwen Cloud (pay-as-you-go)
 wrapper-code qwencloud-token       # launch Claude Code with the Qwen Cloud Token Plan (Qwen, DeepSeek, GLM)
 wrapper-code openrouter            # launch Claude Code with any OpenRouter model (OpenAI, Google, Meta, Mistral, xAI...)
+wrapper-code kimi                  # launch Claude Code with Kimi through the Moonshot API (pay per token)
+wrapper-code kimi-code             # launch Claude Code with your Kimi Code subscription
 wrapper-code deepseek --resume     # anything after the provider is passed to claude
 wrapper-code claude                # your own Claude Code, unchanged, with its token usage recorded
 wrapper-code setup deepseek        # change the API key or model profile
@@ -44,6 +46,8 @@ FAMILY     PROVIDER         BILLING  STATUS          SELECTION
 anthropic  claude           plan     configured      -
 deepseek   deepseek         payg     configured      flash-1m
 gateway    openrouter       payg     not configured  -
+kimi       kimi-code        plan     configured      k3-1m
+kimi       kimi             payg     not configured  -
 local      ollama           local    configured      qwen3-coder
 qwen       qwencloud-token  plan     configured      auto
 qwen       qwencloud        payg     not configured  -
@@ -60,6 +64,8 @@ The first time you launch a provider, a setup page opens in your browser on `127
 | `qwencloud` | Qwen Cloud API key (pay-as-you-go, starts with `sk-`, created at home.qwencloud.com/api-keys; new accounts get a free quota). One profile, `pay-as-you-go`: Qwen 3.8 Max as main model, Qwen 3.8 Flash for Sonnet and subagents, Qwen 3.6 Flash for Haiku, 983k context. | [Qwen Cloud × Claude Code](https://docs.qwencloud.com/developer-guides/clients-and-developer-tools/claude-code) |
 | `qwencloud-token` | Token Plan API key (Personal or Team Edition, starts with `sk-sp-`) from the Qwen Cloud or Alibaba Model Studio console. Profiles: `auto` (default): automatic routing, as in the Qwen Cloud docs. `qwen-max`: Qwen 3.8 Max, Qwen 3.8 Flash for subagents. `qwen-plus`: Qwen 3.7 Plus for every role. `deepseek-pro`: DeepSeek V4 Pro, DeepSeek V4.1 Flash for subagents. `glm`: GLM 5.3 for every role. | [Qwen Cloud × Claude Code](https://docs.qwencloud.com/developer-guides/clients-and-developer-tools/claude-code) |
 | `openrouter` | OpenRouter API key (openrouter.ai/keys), checked for free. The setup page lists every model OpenRouter serves, with a search box; models without tool calling are shown but cannot be selected. The chosen model is used for every role, subagents included. Billing through your OpenRouter credits. | [OpenRouter × Claude Code](https://openrouter.ai/docs/guides/guides/claude-code-integration) |
+| `kimi` | Moonshot API key from platform.kimi.ai, pay per token, checked for free against the models route. Profiles: `k3-1m` (default): Kimi K3 with 1M context, K2.7 Code for the Haiku tier. `k2.7-code`: Kimi K2.7 Code for every role, 256k context; turn thinking on in Claude Code (Alt+T / Option+T). | [Kimi × Claude Code](https://platform.kimi.ai/docs/guide/claude-code-kimi) |
+| `kimi-code` | Kimi Code API key (Kimi membership with Kimi Code, created in the Kimi Code Console), checked for free against the models route. Profiles: `k3-1m` (default): Kimi K3 with 1M context for every role. `k3-256k`: Kimi K3 with 256k context. | [Kimi Code × Claude Code](https://www.kimi.com/code/docs/en/third-party-tools/claude-code.html) |
 | `claude` | Nothing to set up. Runs your own Claude Code exactly as plain `claude` does (your login, your models, your settings; no variable is added or removed) with the usage receiver on, so your Anthropic usage shows up in `wrapper-code usage` next to the other providers. | [Claude Code monitoring](https://code.claude.com/docs/en/monitoring-usage) |
 
 Claude Code's system prompt and tools can exceed 32k tokens, and Ollama serves requests at its own runtime context (`OLLAMA_CONTEXT_LENGTH`, often 32k or less by default), not at the model's maximum. A request that does not fit is silently truncated and the model seems to ignore the prompt. Set Ollama's served context to at least 64k on the Ollama side, for example `OLLAMA_CONTEXT_LENGTH=65536 ollama serve`, or the context-length setting in the Ollama app.
@@ -74,7 +80,7 @@ Alibaba Model Studio and Qwen Cloud are one backend: a Token Plan key from eithe
 
 With OpenRouter you can pick OpenAI, Google, Meta, Mistral, xAI and other models through one key. To use a cheaper model for subagents and background work, edit `ANTHROPIC_DEFAULT_HAIKU_MODEL` and `CLAUDE_CODE_SUBAGENT_MODEL` in `~/.config/wrapper-code/openrouter.env`; the wrapper keeps hand-written keys. OpenRouter itself warns that Claude Code is tuned for Anthropic models, so other models may behave worse in long agentic sessions.
 
-Kimi, GLM and MiniMax are reachable through OpenRouter today; dedicated providers for them are planned. A provider is a single data file in `src/providers/`; pull requests welcome.
+GLM and MiniMax are reachable through OpenRouter today; dedicated providers for them are planned. A provider is a single data file in `src/providers/`; pull requests welcome.
 
 ## Where things are stored
 
@@ -141,6 +147,8 @@ wrapper-code usage clear --provider deepseek --yes
 `usage clear` deletes the recorded usage: all of it, or only one provider's with `--provider`. It shows what will be removed and asks before deleting; `--yes` skips the question, and without a terminal it refuses unless `--yes` is given. There is no undo.
 
 To count your regular Claude Code usage too, start it with `wrapper-code claude` instead of `claude`. Nothing about the session changes; it is only recorded.
+
+Providers do not all count input the same way. Most follow Anthropic's convention, where input excludes the tokens read from cache. Kimi Code (`kimi-code`) appears to include them: a session that reads 37.8k tokens from cache reports about 37k input as well, where the Moonshot API (`kimi`) reports a few hundred. wrapper-code shows the numbers as each provider reports them, so for `kimi-code` the input column overstates the new tokens; the cache read column is the reliable one.
 
 How it works: the wrapper starts a tiny OpenTelemetry receiver on `127.0.0.1` for the session and points Claude Code's own telemetry export at it. The token counts are the ones Claude Code reports for each API request. Nothing leaves your machine; the data lives in `~/.config/wrapper-code/usage.jsonl` (model, tokens and duration per request; no prompts or responses). Set `WRAPPER_CODE_NO_USAGE=1` to turn it off. If your shell already defines `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` or `CLAUDE_CODE_ENABLE_TELEMETRY`, wrapper-code keeps your settings and records nothing for that session. While it records, any `OTEL_EXPORTER_OTLP_LOGS_*` variable in the session's environment is dropped so it cannot redirect the export. OTEL variables set in Claude Code's own settings file (the `env` block of `~/.claude/settings.json`) are not detected; if you export telemetry from there, set `WRAPPER_CODE_NO_USAGE=1`.
 

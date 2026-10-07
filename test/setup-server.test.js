@@ -7,6 +7,8 @@ import deepseek from '../src/providers/deepseek.js';
 import ollama from '../src/providers/ollama.js';
 import qwencloud from '../src/providers/qwencloud.js';
 import openrouter from '../src/providers/openrouter.js';
+import kimi from '../src/providers/kimi.js';
+import kimiCode from '../src/providers/kimi-code.js';
 
 // Servers opened by a test are closed after it even when an assertion fails first;
 // otherwise a failing test leaves sockets open and the file hangs instead of failing.
@@ -775,5 +777,51 @@ test('openrouter: re-running setup keeps a hand-written subagent model override'
   assert.equal(res.status, 200, await res.text());
   assert.equal(written[0].ANTHROPIC_DEFAULT_HAIKU_MODEL, 'google/gemma-4-it');
   assert.equal(written[0].CLAUDE_CODE_SUBAGENT_MODEL, 'google/gemma-4-it');
+  await stop();
+});
+
+test('testCredential for kimi hits the absolute models URL with bearer auth and no body', async () => {
+  const seen = [];
+  const fetchImpl = async (url, init) => { seen.push({ url, init }); return { ok: true, status: 200, statusText: 'OK', text: async () => '' }; };
+  assert.deepEqual(await testCredential(kimi, 'sk-moon', { fetchImpl }), { ok: true });
+  assert.equal(seen[0].url, 'https://api.moonshot.ai/v1/models');
+  assert.equal(seen[0].init.method, 'GET');
+  assert.equal(seen[0].init.headers.Authorization, 'Bearer sk-moon');
+  assert.equal('body' in seen[0].init, false);
+});
+
+test('kimi: POST /save with a key from the other console shows the 401 and writes nothing', async () => {
+  const { post, written, stop } = await boot({ provider: kimi, status: 401 });
+  const res = await post('/save', { credential: 'kimi-code-key', profile: 'k3-1m' });
+  assert.equal(res.status, 400);
+  assert.equal((await res.json()).status, 401);
+  assert.equal(written.length, 0);
+  await stop();
+});
+
+test('kimi: POST /save with a valid key writes the key and the chosen profile', async () => {
+  const { server, post, written } = await boot({ provider: kimi });
+  const res = await post('/save', { credential: 'sk-moon', profile: 'k2.7-code' });
+  assert.equal(res.status, 200, await res.text());
+  assert.deepEqual(written, [{ ANTHROPIC_AUTH_TOKEN: 'sk-moon', WRAPPER_CODE_PROFILE: 'k2.7-code' }]);
+  assert.equal((await server.done).saved, true);
+});
+
+test('testCredential for kimi-code gets /v1/models under the coding base with bearer auth and no body', async () => {
+  const seen = [];
+  const fetchImpl = async (url, init) => { seen.push({ url, init }); return { ok: true, status: 200, statusText: 'OK', text: async () => '' }; };
+  assert.deepEqual(await testCredential(kimiCode, 'sk-kc', { fetchImpl }), { ok: true });
+  assert.equal(seen[0].url, 'https://api.kimi.com/coding/v1/models');
+  assert.equal(seen[0].init.method, 'GET');
+  assert.equal(seen[0].init.headers.Authorization, 'Bearer sk-kc');
+  assert.equal('body' in seen[0].init, false);
+});
+
+test('kimi-code: POST /save with a Moonshot key shows the 401 and writes nothing', async () => {
+  const { post, written, stop } = await boot({ provider: kimiCode, status: 401 });
+  const res = await post('/save', { credential: 'sk-moonshot', profile: 'k3-1m' });
+  assert.equal(res.status, 400);
+  assert.equal((await res.json()).status, 401);
+  assert.equal(written.length, 0);
   await stop();
 });
