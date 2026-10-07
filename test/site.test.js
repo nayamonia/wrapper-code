@@ -38,6 +38,15 @@ test('renderSite builds a self-contained landing page from the brand, the catalo
   assert.match(compare, /wrapper-code never sees them/, 'prompts never pass through wrapper-code');
   assert.match(compare, /no runtime dependencies/, 'footprint claim');
   assert.doesNotMatch(compare, /<table/, 'no comparison table');
+  const details = compare.indexOf('<details>');
+  assert.ok(details > 0 && compare.indexOf('</details>') > details, 'full comparison inside a details element');
+  const summary = compare.slice(0, details);
+  assert.match(summary, /<p class="summary">[^]*?use CCR\.<\/p>/, 'short summary before the details');
+  assert.ok(summary.length < 900, 'summary is short');
+  assert.match(compare.slice(details), /<summary>Read the full comparison<\/summary>/);
+  for (const text of ['If you need any of that, use CCR.', 'wants to solve a smaller problem', 'What wrapper-code does not do, by design', 'Both can be installed at once']) {
+    assert.ok(compare.indexOf(text) > details, `"${text}" is inside the details`);
+  }
   assert.match(html, /<a href="#compare">vs CCR<\/a>/, 'nav link to the comparison');
   for (const provider of catalog.values()) {
     assert.match(html, new RegExp(`<code>wrapper-code ${provider.id}</code>`), `install line for ${provider.id}`);

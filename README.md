@@ -96,6 +96,11 @@ Your global `~/.claude` (CLAUDE.md, skills, plugins, MCP servers, history) is sh
 
 ## wrapper-code vs claude-code-router
 
+[claude-code-router](https://github.com/musistudio/claude-code-router) (CCR) is a local gateway that routes, rewrites and retries every request, for Claude Code and other agents. wrapper-code only sets up the environment of one session and gets out of the way: nothing between Claude Code and the provider, nothing running when you are not working, plain `claude` untouched. If you need routing, fallbacks or other agents, use CCR.
+
+<details>
+<summary><b>Read the full comparison</b></summary>
+
 [claude-code-router](https://github.com/musistudio/claude-code-router) (CCR) is the best-known way to run Claude Code on other models. It is a local gateway: a background service on `127.0.0.1:3456` receives every request from Claude Code (and from Codex, Kimi CLI, OpenCode and other agents), decides per request which provider and model to call, and can rewrite, retry, fall back to another model or key, translate to OpenAI- and Gemini-style APIs, and add vision, web search or MCP tools to a model that lacks them. It has a management UI, request logs with cost estimates, a desktop app and Docker images. If you need any of that, use CCR.
 
 wrapper-code wants to solve a smaller problem: start one Claude Code session on one other provider, with nothing changed for your normal Claude Code and nothing extra running. It sets the provider's `ANTHROPIC_BASE_URL`, key and model variables in the environment of one `claude` process and gets out of the way. That is the whole design, and it is where its advantages come from:
@@ -111,6 +116,8 @@ wrapper-code wants to solve a smaller problem: start one Claude Code session on 
 What wrapper-code does not do, by design: per-request routing, fallbacks, retries, key rotation, several providers in one session, protocol translation (the provider must speak the Anthropic Messages API), other agents than Claude Code. This reflects CCR 3.1 and its documentation (September 2026); check its repository for the current state.
 
 Both can be installed at once. wrapper-code does not know about CCR; if a CCR profile is set as "system default", check that it did not add `ANTHROPIC_BASE_URL` to the `env` block of `~/.claude/settings.json`, because settings there win over the variables wrapper-code sets (see Notes).
+
+</details>
 
 ## Notes
 
