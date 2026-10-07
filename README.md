@@ -29,7 +29,7 @@ wrapper-code deepseek              # launch Claude Code with DeepSeek
 wrapper-code ollama                # launch Claude Code with a local Ollama model
 wrapper-code ollama --model gemma3 # use another main model for this session only
 wrapper-code qwencloud             # launch Claude Code with Qwen Cloud (pay-as-you-go)
-wrapper-code alibaba               # launch Claude Code with the Alibaba Token Plan (Qwen, DeepSeek, GLM)
+wrapper-code qwencloud-token       # launch Claude Code with the Qwen Cloud Token Plan (Qwen, DeepSeek, GLM)
 wrapper-code openrouter            # launch Claude Code with any OpenRouter model (OpenAI, Google, Meta, Mistral, xAI...)
 wrapper-code deepseek --resume     # anything after the provider is passed to claude
 wrapper-code claude                # your own Claude Code, unchanged, with its token usage recorded
@@ -40,13 +40,13 @@ wrapper-code list                  # providers by family: billing, status and th
 `wrapper-code list` groups providers of the same family and shows how each one bills (`plan`, `payg` or `local`):
 
 ```
-FAMILY     PROVIDER    BILLING  STATUS          SELECTION
-anthropic  claude      plan     configured      -
-deepseek   deepseek    payg     configured      flash-1m
-gateway    openrouter  payg     not configured  -
-local      ollama      local    configured      qwen3-coder
-qwen       alibaba     plan     configured      qwen-max
-qwen       qwencloud   payg     not configured  -
+FAMILY     PROVIDER         BILLING  STATUS          SELECTION
+anthropic  claude           plan     configured      -
+deepseek   deepseek         payg     configured      flash-1m
+gateway    openrouter       payg     not configured  -
+local      ollama           local    configured      qwen3-coder
+qwen       qwencloud-token  plan     configured      auto
+qwen       qwencloud        payg     not configured  -
 ```
 
 The first time you launch a provider, a setup page opens in your browser on `127.0.0.1`. Paste your API key, pick a model profile, click **Test and save**. The key is checked against the provider's API before anything is written. Then the session starts right away.
@@ -57,8 +57,8 @@ The first time you launch a provider, a setup page opens in your browser on `127
 |---|---|---|
 | `deepseek` | API key. Profiles: `flash-1m` (default): DeepSeek Flash with 1M context. `v4-pro`: DeepSeek V4 Pro as main model, Flash for subagents. | [DeepSeek × Claude Code](https://api-docs.deepseek.com/quick_start/agent_integrations/claude_code/) |
 | `ollama` | No key. The setup page lists the models installed in your local Ollama (default `http://localhost:11434`, editable for a remote server) and saves one as the default. Models without tool support are shown but cannot be selected. Runs Qwen Coder, Gemma, Llama, Mistral and any other Ollama model, offline. | [Ollama × Claude Code](https://docs.ollama.com/integrations/claude-code) |
-| `qwencloud` | Qwen Cloud API key (pay-as-you-go, starts with `sk-`, created at home.qwencloud.com/api-keys; new accounts get a free quota). One profile, `pay-as-you-go`: automatic routing (`auto`) with Qwen 3.8 Max for Opus, Qwen 3.8 Flash for Sonnet and Qwen 3.6 Flash for Haiku, 983k context. | [Qwen Cloud × Claude Code](https://docs.qwencloud.com/developer-guides/clients-and-developer-tools/claude-code) |
-| `alibaba` | Token Plan API key from Alibaba Cloud Model Studio (Personal or Team Edition, starts with `sk-sp-`). Profiles: `qwen-max` (default): Qwen 3.8 Max, Qwen 3.8 Flash for subagents. `qwen-plus`: Qwen 3.7 Plus for every role. `deepseek-pro`: DeepSeek V4 Pro, DeepSeek V4.1 Flash for subagents. `glm`: GLM 5.3 for every role. | [Model Studio × Claude Code](https://www.alibabacloud.com/help/en/model-studio/claude-code) |
+| `qwencloud` | Qwen Cloud API key (pay-as-you-go, starts with `sk-`, created at home.qwencloud.com/api-keys; new accounts get a free quota). One profile, `pay-as-you-go`: Qwen 3.8 Max as main model, Qwen 3.8 Flash for Sonnet and subagents, Qwen 3.6 Flash for Haiku, 983k context. | [Qwen Cloud × Claude Code](https://docs.qwencloud.com/developer-guides/clients-and-developer-tools/claude-code) |
+| `qwencloud-token` | Token Plan API key (Personal or Team Edition, starts with `sk-sp-`) from the Qwen Cloud or Alibaba Model Studio console. Profiles: `auto` (default): automatic routing, as in the Qwen Cloud docs. `qwen-max`: Qwen 3.8 Max, Qwen 3.8 Flash for subagents. `qwen-plus`: Qwen 3.7 Plus for every role. `deepseek-pro`: DeepSeek V4 Pro, DeepSeek V4.1 Flash for subagents. `glm`: GLM 5.3 for every role. | [Qwen Cloud × Claude Code](https://docs.qwencloud.com/developer-guides/clients-and-developer-tools/claude-code) |
 | `openrouter` | OpenRouter API key (openrouter.ai/keys), checked for free. The setup page lists every model OpenRouter serves, with a search box; models without tool calling are shown but cannot be selected. The chosen model is used for every role, subagents included. Billing through your OpenRouter credits. | [OpenRouter × Claude Code](https://openrouter.ai/docs/guides/guides/claude-code-integration) |
 | `claude` | Nothing to set up. Runs your own Claude Code exactly as plain `claude` does (your login, your models, your settings; no variable is added or removed) with the usage receiver on, so your Anthropic usage shows up in `wrapper-code usage` next to the other providers. | [Claude Code monitoring](https://code.claude.com/docs/en/monitoring-usage) |
 
@@ -68,9 +68,9 @@ The wrapper saves the selected model's maximum context length as `CLAUDE_CODE_AU
 
 `--model` overrides the main model for that session only; subagents and background tasks keep using the saved model.
 
-The Qwen Cloud and Alibaba setups (`qwencloud` and `alibaba`) validate the key with a one-token request to `/v1/messages`, because those endpoints have no model-listing route. It costs one output token per setup.
+The Qwen Cloud setups (`qwencloud` and `qwencloud-token`) validate the key with a one-token request to `/v1/messages`, because those endpoints have no model-listing route. It costs one output token per setup.
 
-The Alibaba Coding Plan was retired, so the former `qwen` provider is gone and `alibaba-token` is now `alibaba`. An old `qwen.env` or `alibaba-token.env` in the config directory is simply ignored.
+Alibaba Model Studio and Qwen Cloud are one backend: a Token Plan key from either console works with `qwencloud-token`. The former `alibaba` provider is now an alias of `qwencloud-token`: `wrapper-code alibaba` still works, and `alibaba.env` is renamed to `qwencloud-token.env` the first time you use either name. Its usage history shows up under `qwencloud-token`. The Alibaba Coding Plan was retired, so the former `qwen` provider is gone, and an old `qwen.env` or `alibaba-token.env` in the config directory is simply ignored.
 
 With OpenRouter you can pick OpenAI, Google, Meta, Mistral, xAI and other models through one key. To use a cheaper model for subagents and background work, edit `ANTHROPIC_DEFAULT_HAIKU_MODEL` and `CLAUDE_CODE_SUBAGENT_MODEL` in `~/.config/wrapper-code/openrouter.env`; the wrapper keeps hand-written keys. OpenRouter itself warns that Claude Code is tuned for Anthropic models, so other models may behave worse in long agentic sessions.
 

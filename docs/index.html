@@ -66,7 +66,7 @@
     <h1>Run Claude Code with any LLM</h1>
     <p class="lead">One command, your provider, zero changes to your Claude Code configuration. The provider's settings live only inside that session.</p>
     <div class="install" id="install"><span class="p">$</span> npm install -g wrapper-code<br><span class="p">$</span> wrapper-code deepseek</div>
-    <div class="chips"><span class="chip">Alibaba Token Plan</span><span class="chip">Claude Code</span><span class="chip">DeepSeek</span><span class="chip">Ollama</span><span class="chip">OpenRouter</span><span class="chip">Qwen Cloud</span></div>
+    <div class="chips"><span class="chip">Claude Code</span><span class="chip">DeepSeek</span><span class="chip">Ollama</span><span class="chip">OpenRouter</span><span class="chip">Qwen Cloud Token Plan</span><span class="chip">Qwen Cloud</span></div>
   </section>
 
   <section class="demo" id="demo">
@@ -86,12 +86,6 @@
     <table>
       <thead><tr><th>Command</th><th>Provider</th><th>Profiles</th><th></th></tr></thead>
       <tbody>
-<tr>
-  <td><code>wrapper-code alibaba</code></td>
-  <td><strong>Alibaba Token Plan</strong><div class="muted">Token Plan API key</div></td>
-  <td><ul class="plain"><li><code>qwen-max</code> Qwen 3.8 Max as main model, Qwen 3.8 Flash for subagents</li><li><code>qwen-plus</code> Qwen 3.7 Plus for every role</li><li><code>deepseek-pro</code> DeepSeek V4 Pro as main model, DeepSeek V4.1 Flash for subagents</li><li><code>glm</code> GLM 5.3 for every role</li></ul></td>
-  <td><a href="https://www.alibabacloud.com/help/en/model-studio/claude-code" rel="noopener">docs</a></td>
-</tr>
 <tr>
   <td><code>wrapper-code claude</code></td>
   <td><strong>Claude Code</strong><div class="muted">Your own Claude Code login</div></td>
@@ -117,9 +111,15 @@
   <td><a href="https://openrouter.ai/docs/guides/guides/claude-code-integration" rel="noopener">docs</a></td>
 </tr>
 <tr>
+  <td><code>wrapper-code qwencloud-token</code></td>
+  <td><strong>Qwen Cloud Token Plan</strong><div class="muted">Token Plan API key</div></td>
+  <td><ul class="plain"><li><code>auto</code> Automatic routing, Qwen 3.8 Max for Opus, Qwen 3.8 Flash for Sonnet, Qwen 3.6 Flash for Haiku</li><li><code>qwen-max</code> Qwen 3.8 Max as main model, Qwen 3.8 Flash for subagents</li><li><code>qwen-plus</code> Qwen 3.7 Plus for every role</li><li><code>deepseek-pro</code> DeepSeek V4 Pro as main model, DeepSeek V4.1 Flash for subagents</li><li><code>glm</code> GLM 5.3 for every role</li></ul></td>
+  <td><a href="https://docs.qwencloud.com/developer-guides/clients-and-developer-tools/claude-code" rel="noopener">docs</a></td>
+</tr>
+<tr>
   <td><code>wrapper-code qwencloud</code></td>
   <td><strong>Qwen Cloud</strong><div class="muted">Qwen Cloud API key</div></td>
-  <td><ul class="plain"><li><code>pay-as-you-go</code> Pay-as-you-go: automatic routing, Qwen 3.8 Max for Opus, Qwen 3.8 Flash for Sonnet, Qwen 3.6 Flash for Haiku</li></ul></td>
+  <td><ul class="plain"><li><code>pay-as-you-go</code> Pay-as-you-go: Qwen 3.8 Max as main model, Qwen 3.8 Flash for Sonnet and subagents, Qwen 3.6 Flash for Haiku</li></ul></td>
   <td><a href="https://docs.qwencloud.com/developer-guides/clients-and-developer-tools/claude-code" rel="noopener">docs</a></td>
 </tr>
       </tbody>
