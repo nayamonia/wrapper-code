@@ -3,8 +3,8 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { createInterface } from 'node:readline/promises';
-import { loadCatalog } from './catalog.js';
-import { readProviderEnv, writeProviderEnv, envFilePath, ConfigError } from './config.js';
+import { loadCatalog, resolveProvider } from './catalog.js';
+import { readProviderEnv, writeProviderEnv, envFilePath, migrateAliasEnv, ConfigError } from './config.js';
 import { buildEnv, isConfigured } from './env.js';
 import { resolveClaude, launchClaude } from './launch.js';
 import { openBrowser } from './open.js';
@@ -174,6 +174,7 @@ export async function main(argv, deps = {}) {
       let status = 'not configured';
       let selection = '-';
       try {
+        if (!provider.passthrough) await migrateAliasEnv(provider, cfg);
         const values = provider.passthrough ? {} : await readProviderEnv(provider.id, cfg);
         if (isConfigured(provider, values)) {
           status = 'configured';
@@ -192,8 +193,7 @@ export async function main(argv, deps = {}) {
   }
 
   if (first === 'setup') {
-    const id = (rest[0] || '').toLowerCase();
-    const provider = catalog.get(id);
+    const provider = resolveProvider(catalog, rest[0]);
     if (!provider) return unknown(rest[0] || '(missing)');
     if (provider.passthrough) {
       stdout.write(`${provider.name} needs no setup: wrapper-code ${provider.id} runs it with your own configuration and only records token usage.\n`);
@@ -201,6 +201,7 @@ export async function main(argv, deps = {}) {
     }
     let current;
     try {
+      await migrateAliasEnv(provider, cfg);
       current = await readProviderEnv(provider.id, cfg);
     } catch (err) {
       if (!(err instanceof ConfigError)) throw err;
@@ -211,9 +212,10 @@ export async function main(argv, deps = {}) {
     return result.saved ? 0 : 1;
   }
 
-  const provider = catalog.get(first.toLowerCase());
+  const provider = resolveProvider(catalog, first);
   if (!provider) return unknown(first);
 
+  if (!provider.passthrough) await migrateAliasEnv(provider, cfg);
   let values = provider.passthrough ? {} : await readProviderEnv(provider.id, cfg);
   if (!isConfigured(provider, values)) {
     stdout.write(`${provider.name} is not configured yet. Opening setup...\n`);

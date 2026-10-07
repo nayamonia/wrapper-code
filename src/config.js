@@ -1,5 +1,5 @@
 import { homedir } from 'node:os';
-import { mkdir, readFile, writeFile, chmod } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, chmod, rename, access } from 'node:fs/promises';
 import path from 'node:path';
 
 const KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -71,4 +71,24 @@ export async function writeProviderEnv(providerId, values, opts) {
   await writeFile(file, serializeEnvFile(values, { header: `wrapper-code — ${providerId}` }), { mode: 0o600 });
   if (platform !== 'win32') await chmod(file, 0o600);
   return file;
+}
+
+// A provider that was renamed keeps the user's saved file: the first <alias>.env found
+// becomes <id>.env. An existing <id>.env always wins and the alias files are left alone.
+export async function migrateAliasEnv(provider, opts) {
+  if (!provider.aliases?.length) return;
+  const target = envFilePath(provider.id, opts);
+  try {
+    await access(target);
+    return;
+  } catch { /* no file under the current id yet */ }
+  for (const alias of provider.aliases) {
+    const from = envFilePath(alias, opts);
+    try {
+      await rename(from, target);
+      return;
+    } catch (err) {
+      if (err.code !== 'ENOENT') throw new ConfigError(`Cannot rename ${from} to ${target}: ${err.message}`);
+    }
+  }
 }

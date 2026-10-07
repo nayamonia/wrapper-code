@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtemp, writeFile, mkdir, chmod, readFile } from 'node:fs/promises';
+import { mkdtemp, writeFile, mkdir, chmod, readFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -968,4 +968,79 @@ test('--help documents usage clear and the claude passthrough', async () => {
   await main(['--help'], { stdout: help, stderr: sink() });
   assert.match(help.text(), /wrapper-code usage clear \[--provider <id>\] \[--yes\]/);
   assert.match(help.text(), /wrapper-code claude \[claude args\.\.\.\]/);
+});
+
+test('end-to-end: the alibaba alias launches qwencloud-token and renames alibaba.env', { skip: isWin }, async () => {
+  const home = await tmp();
+  const binDir = path.join(home, 'fakebin');
+  await mkdir(binDir);
+  const out = path.join(home, 'out.json');
+  const fake = path.join(binDir, 'claude');
+  await writeFile(fake, `#!/usr/bin/env node
+require('fs').writeFileSync(process.env.FAKE_OUT, JSON.stringify({ argv: process.argv.slice(2), env: process.env }));
+process.exit(0);
+`);
+  await chmod(fake, 0o755);
+  const opts = { platform: 'linux', env: {}, home };
+  await writeProviderEnv('alibaba', { ANTHROPIC_AUTH_TOKEN: 'tp-alias', WRAPPER_CODE_PROFILE: 'qwen-max' }, opts);
+  const env = {
+    ...shellEnv(),
+    WRAPPER_CODE_NO_USAGE: '1',
+    HOME: home,
+    XDG_CONFIG_HOME: path.join(home, '.config'),
+    PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
+    FAKE_OUT: out,
+  };
+  const result = await run(['ALIBABA'], env);
+  assert.equal(result.code, 0, result.stderr);
+  const seen = JSON.parse(await readFile(out, 'utf8'));
+  assert.equal(seen.env.ANTHROPIC_BASE_URL, 'https://token-plan.maas.qwencloudapi.com/apps/anthropic');
+  assert.equal(seen.env.ANTHROPIC_AUTH_TOKEN, 'tp-alias');
+  assert.equal(seen.env.ANTHROPIC_MODEL, 'qwen3.8-max');
+  const dir = path.join(home, '.config', 'wrapper-code');
+  assert.deepEqual((await readdir(dir)).filter((f) => f.endsWith('.env')), ['qwencloud-token.env']);
+});
+
+test('with both files present the alias file is untouched and qwencloud-token.env wins', async () => {
+  const home = await tmp();
+  const opts = { platform: 'linux', env: { WRAPPER_CODE_NO_USAGE: '1' }, home };
+  await writeProviderEnv('qwencloud-token', { ANTHROPIC_AUTH_TOKEN: 'tp-new', WRAPPER_CODE_PROFILE: 'glm' }, opts);
+  await writeProviderEnv('alibaba', { ANTHROPIC_AUTH_TOKEN: 'tp-old', WRAPPER_CODE_PROFILE: 'qwen-max' }, opts);
+  const aliasFile = path.join(home, '.config', 'wrapper-code', 'alibaba.env');
+  const before = await readFile(aliasFile, 'utf8');
+  const launched = [];
+  const code = await main(['alibaba'], { stdout: sink(), stderr: sink(), ...opts, resolveClaudeImpl: () => '/c', launchImpl: async (o) => { launched.push(o); return { code: 0 }; } });
+  assert.equal(code, 0);
+  assert.equal(launched[0].env.ANTHROPIC_AUTH_TOKEN, 'tp-new');
+  assert.equal(launched[0].env.ANTHROPIC_MODEL, 'glm-5.3');
+  assert.equal(await readFile(aliasFile, 'utf8'), before);
+});
+
+test('list migrates alibaba.env and shows qwencloud-token configured, with no alibaba row', async () => {
+  const home = await tmp();
+  const opts = { platform: 'linux', env: {}, home };
+  await writeProviderEnv('alibaba', { ANTHROPIC_AUTH_TOKEN: 'tp-list', WRAPPER_CODE_PROFILE: 'qwen-max' }, opts);
+  const out = sink();
+  assert.equal(await main(['list'], { stdout: out, stderr: sink(), ...opts }), 0);
+  assert.match(out.text(), /qwen\s+qwencloud-token\s+plan\s+configured\s+qwen-max/);
+  assert.doesNotMatch(out.text(), /\balibaba\b/);
+  assert.doesNotMatch(out.text(), /tp-list/);
+});
+
+test('setup alibaba opens the qwencloud-token setup and saves to qwencloud-token.env', async () => {
+  const home = await tmp();
+  const opts = { platform: 'linux', env: {}, home };
+  let seenProvider;
+  const code = await main(['setup', 'alibaba'], {
+    stdout: sink(), stderr: sink(), ...opts, openBrowserImpl: () => {},
+    startSetupServerImpl: async ({ provider, writeEnv }) => {
+      seenProvider = provider.id;
+      await writeEnv({ ANTHROPIC_AUTH_TOKEN: 'tp-setup', WRAPPER_CODE_PROFILE: 'auto' });
+      return { url: 'u', done: Promise.resolve({ saved: true, values: {} }), close() {} };
+    },
+  });
+  assert.equal(code, 0);
+  assert.equal(seenProvider, 'qwencloud-token');
+  const dir = path.join(home, '.config', 'wrapper-code');
+  assert.deepEqual((await readdir(dir)).filter((f) => f.endsWith('.env')), ['qwencloud-token.env']);
 });
