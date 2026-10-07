@@ -72,7 +72,7 @@
     <h1>Run Claude Code with any LLM</h1>
     <p class="lead">One command, your provider, zero changes to your Claude Code configuration. The provider's settings live only inside that session.</p>
     <div class="install" id="install"><span class="p">$</span> npm install -g wrapper-code<br><span class="p">$</span> wrapper-code deepseek</div>
-    <div class="chips"><span class="chip">Claude Code</span><span class="chip">DeepSeek</span><span class="chip">Ollama</span><span class="chip">OpenRouter</span><span class="chip">Qwen Cloud Token Plan</span><span class="chip">Qwen Cloud</span></div>
+    <div class="chips"><span class="chip">Claude Code</span><span class="chip">DeepSeek</span><span class="chip">Kimi Code</span><span class="chip">Kimi (Moonshot API)</span><span class="chip">Ollama</span><span class="chip">OpenRouter</span><span class="chip">Qwen Cloud Token Plan</span><span class="chip">Qwen Cloud</span></div>
   </section>
 
   <section class="demo" id="demo">
@@ -103,6 +103,18 @@
   <td><strong>DeepSeek</strong><div class="muted">API key</div></td>
   <td><ul class="plain"><li><code>flash-1m</code> DeepSeek Flash, 1M context (documentation default)</li><li><code>v4-pro</code> DeepSeek V4 Pro as main model, Flash for subagents</li></ul></td>
   <td><a href="https://api-docs.deepseek.com/quick_start/agent_integrations/claude_code/" rel="noopener">docs</a></td>
+</tr>
+<tr>
+  <td><code>wrapper-code kimi-code</code></td>
+  <td><strong>Kimi Code</strong><div class="muted">Kimi Code API key</div></td>
+  <td><ul class="plain"><li><code>k3-1m</code> Kimi K3 with 1M context for every role</li><li><code>k3-256k</code> Kimi K3 with 256k context for every role</li></ul></td>
+  <td><a href="https://www.kimi.com/code/docs/en/third-party-tools/claude-code.html" rel="noopener">docs</a></td>
+</tr>
+<tr>
+  <td><code>wrapper-code kimi</code></td>
+  <td><strong>Kimi (Moonshot API)</strong><div class="muted">Moonshot API key</div></td>
+  <td><ul class="plain"><li><code>k3-1m</code> Kimi K3 with 1M context (guide default), K2.7 Code for the Haiku tier</li><li><code>k2.7-code</code> Kimi K2.7 Code, 256k context, dedicated coding model (needs thinking on: Alt+T / Option+T in Claude Code)</li></ul></td>
+  <td><a href="https://platform.kimi.ai/docs/guide/claude-code-kimi" rel="noopener">docs</a></td>
 </tr>
 <tr>
   <td><code>wrapper-code ollama</code></td>
