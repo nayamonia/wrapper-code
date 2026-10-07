@@ -156,11 +156,14 @@ export async function main(argv, deps = {}) {
     return 0;
   }
 
+  const catalog = await catalogImpl();
+
   if (first === 'usage') {
-    return runUsage(rest, { cfg, stdout, stderr, confirm: confirmImpl, display: (file) => displayPath(file, home || homedir()) });
+    // Records keep the id they were written with; an alias reads as its current id.
+    const canonical = (id) => resolveProvider(catalog, id)?.id ?? id;
+    return runUsage(rest, { cfg, stdout, stderr, confirm: confirmImpl, display: (file) => displayPath(file, home || homedir()), canonical });
   }
 
-  const catalog = await catalogImpl();
   const ids = [...catalog.keys()];
   const unknown = (id) => {
     stderr.write(`Unknown provider "${id}". Available: ${ids.join(', ')}\n`);

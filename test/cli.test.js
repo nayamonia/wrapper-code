@@ -1044,3 +1044,15 @@ test('setup alibaba opens the qwencloud-token setup and saves to qwencloud-token
   const dir = path.join(home, '.config', 'wrapper-code');
   assert.deepEqual((await readdir(dir)).filter((f) => f.endsWith('.env')), ['qwencloud-token.env']);
 });
+
+test('usage through the CLI reports alibaba records under qwencloud-token', async () => {
+  const home = await tmp();
+  const cfg = { platform: 'linux', env: {}, home };
+  const { appendUsage } = await import('../src/usage/store.js');
+  const base = { sessionId: 's', selection: 'x', model: 'qwen3.8-max', querySource: 'main', inputTokens: 10, outputTokens: 1, cacheReadTokens: 0, cacheCreationTokens: 0, durationMs: 1 };
+  await appendUsage([{ ...base, ts: new Date().toISOString(), provider: 'alibaba' }, { ...base, ts: new Date().toISOString(), provider: 'qwencloud-token' }], cfg);
+  const out = sink();
+  assert.equal(await main(['usage', '--provider', 'ALIBABA', '--json'], { stdout: out, stderr: sink(), ...cfg }), 0);
+  const report = JSON.parse(out.text());
+  assert.deepEqual(report.groups.map((g) => [g.provider, g.requests]), [['qwencloud-token', 2]]);
+});
