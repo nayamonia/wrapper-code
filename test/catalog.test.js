@@ -1,6 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { loadCatalog, validateProvider, BILLINGS } from '../src/catalog.js';
+import { mkdtemp, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { loadCatalog, validateProvider, resolveProvider, BILLINGS } from '../src/catalog.js';
 
 const valid = () => ({
   id: 'x', name: 'X', family: 'x', billing: 'payg', docs: 'https://x', credential: { env: 'ANTHROPIC_AUTH_TOKEN', label: 'API key', help: 'h' },
@@ -279,4 +283,40 @@ test('the claude provider is the passthrough one', async () => {
   const claude = (await loadCatalog()).get('claude');
   assert.equal(claude.passthrough, true);
   assert.equal(claude.name, 'Claude Code');
+});
+
+test('validateProvider accepts optional aliases and rejects malformed ones', () => {
+  assert.doesNotThrow(() => validateProvider({ ...valid(), aliases: ['old-x', 'x2'] }));
+  for (const aliases of [[], 'old', ['Old'], ['a b'], [''], [7], ['dup', 'dup']]) {
+    assert.throws(() => validateProvider({ ...valid(), aliases }), /aliases/);
+  }
+});
+
+async function catalogDir(files) {
+  const dir = await mkdtemp(path.join(tmpdir(), 'wc-catalog-'));
+  for (const [name, provider] of Object.entries(files)) {
+    await writeFile(path.join(dir, name), `export default ${JSON.stringify(provider)};\n`);
+  }
+  return pathToFileURL(`${dir}/`);
+}
+
+test('loadCatalog rejects an alias that is another provider id or claimed twice', async () => {
+  const a = { ...valid(), id: 'a', aliases: ['b'] };
+  const b = { ...valid(), id: 'b' };
+  await assert.rejects(loadCatalog(await catalogDir({ 'a.js': a, 'b.js': b })), /alias "b" is already a provider id/);
+  const c = { ...valid(), id: 'c', aliases: ['old'] };
+  const d = { ...valid(), id: 'd', aliases: ['old'] };
+  await assert.rejects(loadCatalog(await catalogDir({ 'c.js': c, 'd.js': d })), /alias "old" is also claimed by "c"/);
+});
+
+test('resolveProvider finds by id or alias, case-insensitively, else undefined', () => {
+  const p = { ...valid(), id: 'new-id', aliases: ['old-id'] };
+  const catalog = new Map([['new-id', p], ['x', valid()]]);
+  assert.equal(resolveProvider(catalog, 'new-id'), p);
+  assert.equal(resolveProvider(catalog, 'old-id'), p);
+  assert.equal(resolveProvider(catalog, 'OLD-ID'), p);
+  assert.equal(resolveProvider(catalog, 'X'), catalog.get('x'));
+  assert.equal(resolveProvider(catalog, 'nope'), undefined);
+  assert.equal(resolveProvider(catalog, ''), undefined);
+  assert.equal(resolveProvider(catalog, undefined), undefined);
 });
