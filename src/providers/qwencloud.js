@@ -1,6 +1,9 @@
 // Values from https://docs.qwencloud.com/developer-guides/clients-and-developer-tools/claude-code
-// (pay-as-you-go, 2026-10-03). The endpoint has no GET /v1/models, so the key is validated
-// with a one-token POST /v1/messages against the cheapest model (costs one output token per setup).
+// (pay-as-you-go, 2026-10-03). The model "auto" exists only on Token Plan endpoints: here it
+// answered 400 "Model not exist" on 2026-10-06, so every role names a model. qwen3.8-max and
+// qwen3.8-flash answered 200 on this endpoint the same day. The endpoint has no GET /v1/models,
+// so the key is validated with a one-token POST /v1/messages against the cheapest model
+// (costs one output token per setup).
 export default {
   id: 'qwencloud',
   name: 'Qwen Cloud',
@@ -17,13 +20,13 @@ export default {
   },
   profiles: {
     'pay-as-you-go': {
-      label: 'Pay-as-you-go: automatic routing, Qwen 3.8 Max for Opus, Qwen 3.8 Flash for Sonnet, Qwen 3.6 Flash for Haiku',
+      label: 'Pay-as-you-go: Qwen 3.8 Max as main model, Qwen 3.8 Flash for Sonnet and subagents, Qwen 3.6 Flash for Haiku',
       env: {
-        ANTHROPIC_MODEL: 'auto',
-        ANTHROPIC_DEFAULT_HAIKU_MODEL: 'qwen3.6-flash',
-        ANTHROPIC_DEFAULT_SONNET_MODEL: 'qwen3.8-flash',
+        ANTHROPIC_MODEL: 'qwen3.8-max',
         ANTHROPIC_DEFAULT_OPUS_MODEL: 'qwen3.8-max',
-        CLAUDE_CODE_SUBAGENT_MODEL: 'auto',
+        ANTHROPIC_DEFAULT_SONNET_MODEL: 'qwen3.8-flash',
+        ANTHROPIC_DEFAULT_HAIKU_MODEL: 'qwen3.6-flash',
+        CLAUDE_CODE_SUBAGENT_MODEL: 'qwen3.8-flash',
         CLAUDE_CODE_MAX_CONTEXT_TOKENS: '983616',
       },
     },

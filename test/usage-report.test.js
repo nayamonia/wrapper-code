@@ -183,3 +183,39 @@ test('usage clear rejects options it does not know', async () => {
   assert.match(stderr.text(), /usage clear: unknown option --since/);
   assert.equal((await readUsage(cfg)).events.length, 5);
 });
+
+const canonical = (id) => (id === 'alibaba' ? 'qwencloud-token' : id);
+const ALIASED = [
+  ev('2026-10-03T10:00:00Z', 'alibaba', 'qwen3.8-max'),
+  ev('2026-10-03T11:00:00Z', 'qwencloud-token', 'qwen3.8-max', { outputTokens: 50 }),
+  ev('2026-10-03T11:00:00Z', 'ollama', 'qwen3-code:14b'),
+];
+
+test('aggregate folds alias ids into the canonical id, and a provider filter matches both', () => {
+  const all = aggregate(ALIASED, { canonical });
+  assert.deepEqual(all.groups.map((g) => [g.provider, g.model, g.requests, g.outputTokens]), [
+    ['ollama', 'qwen3-code:14b', 1, 100],
+    ['qwencloud-token', 'qwen3.8-max', 2, 150],
+  ]);
+  for (const provider of ['alibaba', 'qwencloud-token']) {
+    assert.equal(aggregate(ALIASED, { canonical, provider }).total.requests, 2, provider);
+  }
+});
+
+test('usage clear --provider through an alias removes the records under both ids', async () => {
+  const cfg = { platform: 'linux', env: {}, home: await mkdtemp(path.join(tmpdir(), 'wc-clear-')) };
+  await appendUsage(ALIASED, cfg);
+  const stdout = sinkOf();
+  const asked = [];
+  assert.equal(await runUsage(['clear', '--provider', 'alibaba'], { cfg, stdout, stderr: sinkOf(), canonical, confirm: async (q) => { asked.push(q); return true; } }), 0);
+  assert.match(asked[0], /^This removes 2 requests \(qwencloud-token\) from /);
+  assert.match(stdout.text(), /removed 2 requests \(qwencloud-token\)\n/);
+  assert.deepEqual((await readUsage(cfg)).events.map((e) => e.provider), ['ollama']);
+});
+
+test('usage clear --provider with a name that resolves to nothing still matches the raw id', async () => {
+  const cfg = { platform: 'linux', env: {}, home: await mkdtemp(path.join(tmpdir(), 'wc-clear-')) };
+  await appendUsage([ev('2026-10-03T10:00:00Z', 'qwen', 'qwen3-coder'), ev('2026-10-03T10:00:00Z', 'ollama', 'm')], cfg);
+  assert.equal(await runUsage(['clear', '--provider', 'qwen', '--yes'], { cfg, stdout: sinkOf(), stderr: sinkOf(), canonical }), 0);
+  assert.deepEqual((await readUsage(cfg)).events.map((e) => e.provider), ['ollama']);
+});

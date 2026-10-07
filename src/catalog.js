@@ -4,6 +4,8 @@ const PROVIDERS_DIR = new URL('./providers/', import.meta.url);
 // Order matters: list sorts a family's providers in this order.
 export const BILLINGS = ['plan', 'payg', 'local'];
 const FAMILY_RE = /^[a-z0-9-]+$/;
+// Provider ids and aliases share the same shape.
+const ID_RE = FAMILY_RE;
 
 function isObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -19,6 +21,12 @@ export function validateProvider(provider) {
   }
   if (!BILLINGS.includes(provider.billing)) {
     throw new Error(`${where}: billing must be one of ${BILLINGS.join(', ')}`);
+  }
+  if (provider.aliases !== undefined) {
+    const a = provider.aliases;
+    if (!Array.isArray(a) || a.length === 0 || !a.every((x) => typeof x === 'string' && ID_RE.test(x)) || new Set(a).size !== a.length) {
+      throw new Error(`${where}: aliases must be a non-empty array of distinct lowercase ids`);
+    }
   }
   if (provider.passthrough !== undefined) {
     // A passthrough provider launches claude with the user's environment as it is.
@@ -87,5 +95,23 @@ export async function loadCatalog(dirUrl = PROVIDERS_DIR) {
     validateProvider(provider);
     catalog.set(provider.id, provider);
   }
+  // An alias is an old name for a provider: it may not shadow an id or belong to two providers.
+  const owners = new Map();
+  for (const provider of catalog.values()) {
+    for (const alias of provider.aliases ?? []) {
+      if (catalog.has(alias)) throw new Error(`provider "${provider.id}": alias "${alias}" is already a provider id`);
+      if (owners.has(alias)) throw new Error(`provider "${provider.id}": alias "${alias}" is also claimed by "${owners.get(alias)}"`);
+      owners.set(alias, provider.id);
+    }
+  }
   return catalog;
+}
+
+export function resolveProvider(catalog, name) {
+  const key = String(name ?? '').toLowerCase();
+  if (catalog.has(key)) return catalog.get(key);
+  for (const provider of catalog.values()) {
+    if (provider.aliases?.includes(key)) return provider;
+  }
+  return undefined;
 }

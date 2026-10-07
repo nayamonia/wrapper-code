@@ -21,16 +21,20 @@ function add(bucket, e) {
   bucket.cacheCreationTokens += e.cacheCreationTokens || 0;
 }
 
-export function aggregate(events, { since = 0, provider, byDay = false } = {}) {
+const same = (id) => id;
+
+export function aggregate(events, { since = 0, provider, byDay = false, canonical = same } = {}) {
+  const target = provider ? canonical(provider) : undefined;
   const groups = new Map();
   const total = newBucket({});
   for (const e of events) {
     const t = Date.parse(e.ts);
     if (!Number.isFinite(t) || t < since) continue;
-    if (provider && e.provider !== provider) continue;
+    const id = canonical(e.provider);
+    if (target && id !== target) continue;
     const day = byDay ? e.ts.slice(0, 10) : undefined;
-    const key = `${day ?? ''}\u0000${e.provider}\u0000${e.model}`;
-    if (!groups.has(key)) groups.set(key, newBucket(byDay ? { day, provider: e.provider, model: e.model } : { provider: e.provider, model: e.model }));
+    const key = `${day ?? ''}\u0000${id}\u0000${e.model}`;
+    if (!groups.has(key)) groups.set(key, newBucket(byDay ? { day, provider: id, model: e.model } : { provider: id, model: e.model }));
     add(groups.get(key), e);
     add(total, e);
   }
@@ -53,7 +57,7 @@ export function renderReport({ groups, total, skipped = 0, since, byDay = false 
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 // confirm(question) resolves true or false, or null when there is no terminal to ask on.
-async function runClear(args, { cfg, stdout, stderr, confirm, display }) {
+async function runClear(args, { cfg, stdout, stderr, confirm, display, canonical }) {
   let provider;
   let yes = false;
   for (let i = 0; i < args.length; i += 1) {
@@ -70,8 +74,10 @@ async function runClear(args, { cfg, stdout, stderr, confirm, display }) {
     stderr.write('usage clear: --provider expects a provider id\n');
     return 1;
   }
+  if (provider) provider = canonical(provider);
   const { events, skipped } = await readUsage(cfg);
-  const count = provider ? events.filter((e) => e.provider === provider).length : events.length;
+  const matching = provider ? events.filter((e) => canonical(e.provider) === provider) : events;
+  const count = matching.length;
   if (!count && (provider || !skipped)) {
     stdout.write(`${provider ? `no usage recorded for ${provider}` : 'no usage recorded yet'}; nothing to clear\n`);
     return 0;
@@ -90,13 +96,13 @@ async function runClear(args, { cfg, stdout, stderr, confirm, display }) {
       return 1;
     }
   }
-  const { removed } = await clearUsage({ provider }, cfg);
+  const { removed } = await clearUsage({ provider: provider ? [...new Set(matching.map((e) => e.provider))] : undefined }, cfg);
   stdout.write(`removed ${plural(removed, 'request')}${provider ? ` (${provider})` : ''}\n`);
   return 0;
 }
 
-export async function runUsage(args, { cfg, stdout, stderr, now = Date.now(), confirm = async () => null, display = (file) => file }) {
-  if (args[0] === 'clear') return runClear(args.slice(1), { cfg, stdout, stderr, confirm, display });
+export async function runUsage(args, { cfg, stdout, stderr, now = Date.now(), confirm = async () => null, display = (file) => file, canonical = same }) {
+  if (args[0] === 'clear') return runClear(args.slice(1), { cfg, stdout, stderr, confirm, display, canonical });
   let since = '30d';
   let provider;
   let byDay = false;
@@ -120,7 +126,7 @@ export async function runUsage(args, { cfg, stdout, stderr, now = Date.now(), co
     return 1;
   }
   const { events, skipped } = await readUsage(cfg);
-  const { groups, total } = aggregate(events, { since: cutoff, provider, byDay });
+  const { groups, total } = aggregate(events, { since: cutoff, provider, byDay, canonical });
   if (json) {
     stdout.write(`${JSON.stringify({ since, provider: provider ?? null, byDay, groups, total, skipped })}\n`);
     return 0;

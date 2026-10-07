@@ -75,16 +75,17 @@ export async function clearUsage({ provider } = {}, opts) {
     if (err.code === 'ENOENT') return { removed: 0 };
     throw err;
   }
+  const wanted = provider === undefined ? null : [].concat(provider);
   const kept = [];
   let removed = 0;
   for (const line of text.split('\n')) {
     if (!line.trim()) continue;
     let e = null;
     try { e = JSON.parse(line); } catch { /* malformed */ }
-    if (provider ? e?.provider === provider : isUsageEvent(e)) removed += 1;
-    else if (provider) kept.push(line);
+    if (wanted ? wanted.includes(e?.provider) : isUsageEvent(e)) removed += 1;
+    else if (wanted) kept.push(line);
   }
-  if (provider && !removed) return { removed };
+  if (wanted && !removed) return { removed };
   if (!kept.length) {
     await rm(file, { force: true });
     return { removed };

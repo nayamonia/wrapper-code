@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, writeFile, mkdir, stat } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, mkdir, stat, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { parseEnvFile, serializeEnvFile, configDir, envFilePath, readProviderEnv, writeProviderEnv, ConfigError } from '../src/config.js';
+import { parseEnvFile, serializeEnvFile, configDir, envFilePath, readProviderEnv, writeProviderEnv, migrateAliasEnv, ConfigError } from '../src/config.js';
 
 test('parseEnvFile reads KEY=value, skips comments and blank lines, trims whitespace', () => {
   const text = '# header\n\nANTHROPIC_AUTH_TOKEN=sk-abc\n  WRAPPER_CODE_PROFILE = flash-1m \n';
@@ -109,4 +109,32 @@ test('readProviderEnv throws ConfigError naming the file and the setup command o
     assert.match(err.message, /wrapper-code setup deepseek/);
     return true;
   });
+});
+
+const aliased = { id: 'new-id', aliases: ['old-id', 'older-id'] };
+
+test('migrateAliasEnv renames the first alias file to the provider id and keeps 0600', async () => {
+  const opts = { platform: 'linux', env: {}, home: await mkdtemp(path.join(tmpdir(), 'wc-mig-')) };
+  await writeProviderEnv('older-id', { ANTHROPIC_AUTH_TOKEN: 'sk-older' }, opts);
+  await migrateAliasEnv(aliased, opts);
+  assert.deepEqual(await readProviderEnv('new-id', opts), { ANTHROPIC_AUTH_TOKEN: 'sk-older' });
+  assert.deepEqual(await readdir(configDir(opts)), ['new-id.env']);
+  if (process.platform !== 'win32') assert.equal((await stat(envFilePath('new-id', opts))).mode & 0o777, 0o600);
+});
+
+test('migrateAliasEnv leaves every file alone when the provider file already exists', async () => {
+  const opts = { platform: 'linux', env: {}, home: await mkdtemp(path.join(tmpdir(), 'wc-mig-')) };
+  await writeProviderEnv('new-id', { ANTHROPIC_AUTH_TOKEN: 'sk-new' }, opts);
+  await writeProviderEnv('old-id', { ANTHROPIC_AUTH_TOKEN: 'sk-old' }, opts);
+  const before = await readFile(envFilePath('old-id', opts), 'utf8');
+  await migrateAliasEnv(aliased, opts);
+  assert.equal(await readFile(envFilePath('old-id', opts), 'utf8'), before);
+  assert.deepEqual(await readProviderEnv('new-id', opts), { ANTHROPIC_AUTH_TOKEN: 'sk-new' });
+});
+
+test('migrateAliasEnv does nothing without aliases or without alias files', async () => {
+  const opts = { platform: 'linux', env: {}, home: await mkdtemp(path.join(tmpdir(), 'wc-mig-')) };
+  await migrateAliasEnv({ id: 'plain' }, opts);
+  await migrateAliasEnv(aliased, opts);
+  await assert.rejects(readdir(configDir(opts)), { code: 'ENOENT' });
 });

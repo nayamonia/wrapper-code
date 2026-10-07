@@ -133,3 +133,10 @@ test('clearUsage by provider removes the file when nothing is left', async () =>
   assert.deepEqual(await clearUsage({ provider: 'deepseek' }, o), { removed: 1 });
   await assert.rejects(stat(file), { code: 'ENOENT' });
 });
+
+test('clearUsage accepts several provider ids at once', async () => {
+  const o = await opts();
+  await appendUsage([EV({ provider: 'alibaba' }), EV({ provider: 'qwencloud-token' }), EV({ provider: 'ollama' })], o);
+  assert.deepEqual(await clearUsage({ provider: ['alibaba', 'qwencloud-token'] }, o), { removed: 2 });
+  assert.deepEqual((await readUsage(o)).events.map((e) => e.provider), ['ollama']);
+});

@@ -1,6 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { loadCatalog, validateProvider, BILLINGS } from '../src/catalog.js';
+import { mkdtemp, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { loadCatalog, validateProvider, resolveProvider, BILLINGS } from '../src/catalog.js';
 
 const valid = () => ({
   id: 'x', name: 'X', family: 'x', billing: 'payg', docs: 'https://x', credential: { env: 'ANTHROPIC_AUTH_TOKEN', label: 'API key', help: 'h' },
@@ -140,13 +144,16 @@ test('loadCatalog loads qwencloud with the Qwen Cloud pay-as-you-go values', asy
   assert.deepEqual(Object.keys(qc.profiles), ['pay-as-you-go']);
   assert.equal(qc.defaultProfile, 'pay-as-you-go');
   assert.deepEqual(qc.profiles['pay-as-you-go'].env, {
-    ANTHROPIC_MODEL: 'auto',
-    ANTHROPIC_DEFAULT_HAIKU_MODEL: 'qwen3.6-flash',
-    ANTHROPIC_DEFAULT_SONNET_MODEL: 'qwen3.8-flash',
+    ANTHROPIC_MODEL: 'qwen3.8-max',
     ANTHROPIC_DEFAULT_OPUS_MODEL: 'qwen3.8-max',
-    CLAUDE_CODE_SUBAGENT_MODEL: 'auto',
+    ANTHROPIC_DEFAULT_SONNET_MODEL: 'qwen3.8-flash',
+    ANTHROPIC_DEFAULT_HAIKU_MODEL: 'qwen3.6-flash',
+    CLAUDE_CODE_SUBAGENT_MODEL: 'qwen3.8-flash',
     CLAUDE_CODE_MAX_CONTEXT_TOKENS: '983616',
   });
+  // auto exists only on the Token Plan endpoints; pay-as-you-go answers 400 Model not exist.
+  assert.equal(Object.values(qc.profiles['pay-as-you-go'].env).includes('auto'), false);
+  assert.doesNotMatch(qc.profiles['pay-as-you-go'].label, /automatic routing|auto\b/);
   assert.equal(qc.test.method, 'POST');
   assert.equal(qc.test.path, '/v1/messages');
   assert.equal(qc.test.auth, 'bearer');
@@ -165,19 +172,31 @@ const roles = (main, fast) => ({
   CLAUDE_CODE_SUBAGENT_MODEL: fast,
 });
 
-test('loadCatalog loads alibaba with the Alibaba Token Plan values and four profiles', async () => {
+test('loadCatalog loads qwencloud-token with the Qwen Cloud Token Plan values, five profiles and the alibaba alias', async () => {
   const catalog = await loadCatalog();
-  assert.equal(catalog.has('alibaba-token'), false, 'renamed to alibaba');
-  assert.equal(catalog.has('qwen-token'), false);
-  const qt = catalog.get('alibaba');
-  assert.ok(qt, 'alibaba provider present');
-  assert.equal(qt.name, 'Alibaba Token Plan');
+  for (const gone of ['alibaba', 'alibaba-token', 'qwen-token']) assert.equal(catalog.has(gone), false, `${gone} is not an id`);
+  const qt = catalog.get('qwencloud-token');
+  assert.ok(qt, 'qwencloud-token provider present');
+  assert.equal(qt.name, 'Qwen Cloud Token Plan');
+  assert.equal(qt.family, 'qwen');
+  assert.equal(qt.billing, 'plan');
+  assert.deepEqual(qt.aliases, ['alibaba']);
+  assert.equal(qt.docs, 'https://docs.qwencloud.com/developer-guides/clients-and-developer-tools/claude-code');
   assert.equal(qt.credential.env, 'ANTHROPIC_AUTH_TOKEN');
   assert.match(qt.credential.label, /Token Plan/);
   assert.match(qt.credential.help, /sk-sp-/);
-  assert.equal(qt.env.ANTHROPIC_BASE_URL, 'https://token-plan.ap-southeast-1.maas.aliyuncs.com/apps/anthropic');
-  assert.deepEqual(Object.keys(qt.profiles), ['qwen-max', 'qwen-plus', 'deepseek-pro', 'glm']);
-  assert.equal(qt.defaultProfile, 'qwen-max');
+  assert.match(qt.credential.help, /wrapper-code qwencloud\b/);
+  assert.deepEqual(qt.env, { ANTHROPIC_BASE_URL: 'https://token-plan.maas.qwencloudapi.com/apps/anthropic' });
+  assert.deepEqual(Object.keys(qt.profiles), ['auto', 'qwen-max', 'qwen-plus', 'deepseek-pro', 'glm']);
+  assert.equal(qt.defaultProfile, 'auto');
+  assert.deepEqual(qt.profiles.auto.env, {
+    ANTHROPIC_MODEL: 'auto',
+    ANTHROPIC_DEFAULT_OPUS_MODEL: 'qwen3.8-max',
+    ANTHROPIC_DEFAULT_SONNET_MODEL: 'qwen3.8-flash',
+    ANTHROPIC_DEFAULT_HAIKU_MODEL: 'qwen3.6-flash',
+    CLAUDE_CODE_SUBAGENT_MODEL: 'auto',
+    CLAUDE_CODE_MAX_CONTEXT_TOKENS: '983616',
+  });
   assert.deepEqual(qt.profiles['qwen-max'].env, roles('qwen3.8-max', 'qwen3.8-flash'));
   assert.deepEqual(qt.profiles['qwen-plus'].env, roles('qwen3.7-plus', 'qwen3.7-plus'));
   assert.deepEqual(qt.profiles['deepseek-pro'].env, roles('deepseek-v4-pro', 'deepseek-v4.1-flash'));
@@ -187,17 +206,18 @@ test('loadCatalog loads alibaba with the Alibaba Token Plan values and four prof
   assert.equal(qt.test.auth, 'bearer');
   assert.equal(qt.test.headers['anthropic-version'], '2023-06-01');
   assert.deepEqual(qt.test.body, { model: 'qwen3.7-plus', max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] });
+  assert.equal(Object.isFrozen(qt.test.body), true);
   assert.equal(qt.editableBaseUrl, false);
 });
 
 test('help texts no longer mention the Coding Plan or the old ids', async () => {
   const catalog = await loadCatalog();
-  const alibaba = catalog.get('alibaba').credential.help;
-  assert.match(alibaba, /sk-sp-/);
-  assert.doesNotMatch(alibaba, /Coding Plan|wrapper-code qwen\b|alibaba-token/);
+  const token = catalog.get('qwencloud-token').credential.help;
+  assert.match(token, /sk-sp-/);
+  assert.doesNotMatch(token, /Coding Plan|wrapper-code qwen\b|alibaba-token/);
   const qwencloud = catalog.get('qwencloud').credential.help;
   assert.doesNotMatch(qwencloud, /Coding Plan|alibaba-token/);
-  assert.deepEqual([...catalog.keys()].sort(), ['alibaba', 'claude', 'deepseek', 'ollama', 'openrouter', 'qwencloud']);
+  assert.deepEqual([...catalog.keys()].sort(), ['claude', 'deepseek', 'ollama', 'openrouter', 'qwencloud', 'qwencloud-token']);
 });
 
 test('validateProvider accepts models.format ollama/openrouter and models.emptyHint, rejects other formats', () => {
@@ -257,7 +277,7 @@ test('catalog family and billing per provider', async () => {
   const catalog = await loadCatalog();
   const actual = Object.fromEntries([...catalog.values()].map((p) => [p.id, `${p.family}/${p.billing}`]));
   assert.deepEqual(actual, {
-    alibaba: 'qwen/plan',
+    'qwencloud-token': 'qwen/plan',
     claude: 'anthropic/plan',
     deepseek: 'deepseek/payg',
     ollama: 'local/local',
@@ -279,4 +299,40 @@ test('the claude provider is the passthrough one', async () => {
   const claude = (await loadCatalog()).get('claude');
   assert.equal(claude.passthrough, true);
   assert.equal(claude.name, 'Claude Code');
+});
+
+test('validateProvider accepts optional aliases and rejects malformed ones', () => {
+  assert.doesNotThrow(() => validateProvider({ ...valid(), aliases: ['old-x', 'x2'] }));
+  for (const aliases of [[], 'old', ['Old'], ['a b'], [''], [7], ['dup', 'dup']]) {
+    assert.throws(() => validateProvider({ ...valid(), aliases }), /aliases/);
+  }
+});
+
+async function catalogDir(files) {
+  const dir = await mkdtemp(path.join(tmpdir(), 'wc-catalog-'));
+  for (const [name, provider] of Object.entries(files)) {
+    await writeFile(path.join(dir, name), `export default ${JSON.stringify(provider)};\n`);
+  }
+  return pathToFileURL(`${dir}/`);
+}
+
+test('loadCatalog rejects an alias that is another provider id or claimed twice', async () => {
+  const a = { ...valid(), id: 'a', aliases: ['b'] };
+  const b = { ...valid(), id: 'b' };
+  await assert.rejects(loadCatalog(await catalogDir({ 'a.js': a, 'b.js': b })), /alias "b" is already a provider id/);
+  const c = { ...valid(), id: 'c', aliases: ['old'] };
+  const d = { ...valid(), id: 'd', aliases: ['old'] };
+  await assert.rejects(loadCatalog(await catalogDir({ 'c.js': c, 'd.js': d })), /alias "old" is also claimed by "c"/);
+});
+
+test('resolveProvider finds by id or alias, case-insensitively, else undefined', () => {
+  const p = { ...valid(), id: 'new-id', aliases: ['old-id'] };
+  const catalog = new Map([['new-id', p], ['x', valid()]]);
+  assert.equal(resolveProvider(catalog, 'new-id'), p);
+  assert.equal(resolveProvider(catalog, 'old-id'), p);
+  assert.equal(resolveProvider(catalog, 'OLD-ID'), p);
+  assert.equal(resolveProvider(catalog, 'X'), catalog.get('x'));
+  assert.equal(resolveProvider(catalog, 'nope'), undefined);
+  assert.equal(resolveProvider(catalog, ''), undefined);
+  assert.equal(resolveProvider(catalog, undefined), undefined);
 });
