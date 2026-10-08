@@ -444,7 +444,7 @@ test('the retired ids qwen and alibaba-token are unknown and the message lists t
     const stderr = sink();
     const code = await main([old], { stdout: sink(), stderr, platform: 'linux', env: {}, home: await tmp() });
     assert.equal(code, 1);
-    assert.match(stderr.text(), new RegExp(`Unknown provider "${old}"\\. Available: claude, deepseek, kimi-code, kimi, ollama, openrouter, qwencloud-token, qwencloud`));
+    assert.match(stderr.text(), new RegExp(`Unknown provider "${old}"\\. Available: claude, deepseek, kimi-code, kimi, ollama, openrouter, qwencloud-token, qwencloud, zai-coding`));
   }
 });
 
@@ -870,6 +870,7 @@ test('list groups the real catalog by family, plan before payg', async () => {
     'anthropic claude plan',
     'deepseek deepseek payg',
     'gateway openrouter payg',
+    'glm zai-coding plan',
     'kimi kimi-code plan',
     'kimi kimi payg',
     'local ollama local',
@@ -1156,4 +1157,37 @@ process.exit(0);
   assert.equal(seen.env.CLAUDE_CODE_SUBAGENT_MODEL, 'k3-256k');
   assert.equal(seen.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW, '262144');
   assert.equal(seen.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS, '262144');
+});
+
+test('end-to-end: zai-coding launches a fake claude with the GLM 5.3 profile and no shell Anthropic key', { skip: isWin }, async () => {
+  const home = await tmp();
+  const binDir = path.join(home, 'fakebin');
+  await mkdir(binDir);
+  const out = path.join(home, 'out.json');
+  const fake = path.join(binDir, 'claude');
+  await writeFile(fake, `#!/usr/bin/env node
+require('fs').writeFileSync(process.env.FAKE_OUT, JSON.stringify({ argv: process.argv.slice(2), env: process.env }));
+process.exit(0);
+`);
+  await chmod(fake, 0o755);
+  await writeProviderEnv('zai-coding', { ANTHROPIC_AUTH_TOKEN: 'zai-e2e', WRAPPER_CODE_PROFILE: 'glm-5.3' }, { platform: 'linux', env: {}, home });
+  const env = {
+    ...shellEnv(),
+    ANTHROPIC_API_KEY: 'sk-ant-shell',
+    WRAPPER_CODE_NO_USAGE: '1',
+    HOME: home,
+    XDG_CONFIG_HOME: path.join(home, '.config'),
+    PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
+    FAKE_OUT: out,
+  };
+  const result = await run(['zai-coding'], env);
+  assert.equal(result.code, 0, result.stderr);
+  const seen = JSON.parse(await readFile(out, 'utf8'));
+  assert.equal(seen.env.ANTHROPIC_BASE_URL, 'https://api.z.ai/api/anthropic');
+  assert.equal(seen.env.ANTHROPIC_AUTH_TOKEN, 'zai-e2e');
+  assert.equal(seen.env.API_TIMEOUT_MS, '3000000');
+  assert.equal(seen.env.ANTHROPIC_MODEL, 'glm-5.3');
+  assert.equal(seen.env.ANTHROPIC_DEFAULT_HAIKU_MODEL, 'glm-5.3-flash');
+  assert.equal(seen.env.CLAUDE_CODE_SUBAGENT_MODEL, 'glm-5.3');
+  assert.equal('ANTHROPIC_API_KEY' in seen.env, false);
 });

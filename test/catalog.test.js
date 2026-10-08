@@ -217,7 +217,7 @@ test('help texts no longer mention the Coding Plan or the old ids', async () => 
   assert.doesNotMatch(token, /Coding Plan|wrapper-code qwen\b|alibaba-token/);
   const qwencloud = catalog.get('qwencloud').credential.help;
   assert.doesNotMatch(qwencloud, /Coding Plan|alibaba-token/);
-  assert.deepEqual([...catalog.keys()].sort(), ['claude', 'deepseek', 'kimi', 'kimi-code', 'ollama', 'openrouter', 'qwencloud', 'qwencloud-token']);
+  assert.deepEqual([...catalog.keys()].sort(), ['claude', 'deepseek', 'kimi', 'kimi-code', 'ollama', 'openrouter', 'qwencloud', 'qwencloud-token', 'zai-coding']);
 });
 
 test('validateProvider accepts models.format ollama/openrouter and models.emptyHint, rejects other formats', () => {
@@ -285,6 +285,7 @@ test('catalog family and billing per provider', async () => {
     ollama: 'local/local',
     openrouter: 'gateway/payg',
     qwencloud: 'qwen/payg',
+    'zai-coding': 'glm/plan',
   });
 });
 
@@ -411,4 +412,38 @@ test('loadCatalog loads kimi-code with the Kimi Code guide values', async () => 
   assert.deepEqual(kc.profiles['k3-256k'].env, sameModel('k3-256k', '262144'));
   assert.deepEqual(kc.test, { method: 'GET', path: '/v1/models', auth: 'bearer' });
   assert.equal(kc.editableBaseUrl, false);
+});
+
+test('loadCatalog loads zai-coding with the Z.ai Claude Code guide values', async () => {
+  const catalog = await loadCatalog();
+  const z = catalog.get('zai-coding');
+  assert.ok(z, 'zai-coding provider present');
+  assert.equal(z.name, 'Z.ai GLM Coding Plan');
+  assert.equal(z.family, 'glm');
+  assert.equal(z.billing, 'plan');
+  assert.equal(z.docs, 'https://docs.z.ai/devpack/tool/claude');
+  assert.equal(z.credential.env, 'ANTHROPIC_AUTH_TOKEN');
+  assert.equal(z.credential.label, 'Z.ai API key');
+  assert.match(z.credential.help, /GLM Coding Plan/);
+  assert.match(z.credential.help, /never the account balance or usage bundles/);
+  assert.deepEqual(z.env, {
+    ANTHROPIC_BASE_URL: 'https://api.z.ai/api/anthropic',
+    API_TIMEOUT_MS: '3000000',
+  });
+  assert.deepEqual(Object.keys(z.profiles), ['glm-5.3', 'glm-5.3-1m', 'flash']);
+  assert.equal(z.defaultProfile, 'glm-5.3');
+  const roles = (main, haiku) => ({
+    ANTHROPIC_MODEL: main,
+    ANTHROPIC_DEFAULT_OPUS_MODEL: main,
+    ANTHROPIC_DEFAULT_SONNET_MODEL: main,
+    ANTHROPIC_DEFAULT_FABLE_MODEL: main,
+    ANTHROPIC_DEFAULT_HAIKU_MODEL: haiku,
+    CLAUDE_CODE_SUBAGENT_MODEL: main,
+  });
+  assert.deepEqual(z.profiles['glm-5.3'].env, roles('glm-5.3', 'glm-5.3-flash'));
+  assert.deepEqual(z.profiles['glm-5.3-1m'].env, { ...roles('glm-5.3[1m]', 'glm-5.3-flash'), CLAUDE_CODE_AUTO_COMPACT_WINDOW: '1000000' });
+  assert.deepEqual(z.profiles.flash.env, roles('glm-5.3-flash', 'glm-5.3-flash'));
+  for (const p of Object.values(z.profiles)) assert.equal(typeof p.label, 'string');
+  assert.deepEqual(z.test, { method: 'GET', url: 'https://api.z.ai/api/paas/v4/models', auth: 'bearer' });
+  assert.equal(z.editableBaseUrl, false);
 });

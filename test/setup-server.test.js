@@ -9,6 +9,7 @@ import qwencloud from '../src/providers/qwencloud.js';
 import openrouter from '../src/providers/openrouter.js';
 import kimi from '../src/providers/kimi.js';
 import kimiCode from '../src/providers/kimi-code.js';
+import zaiCoding from '../src/providers/zai-coding.js';
 
 // Servers opened by a test are closed after it even when an assertion fails first;
 // otherwise a failing test leaves sockets open and the file hangs instead of failing.
@@ -824,4 +825,31 @@ test('kimi-code: POST /save with a Moonshot key shows the 401 and writes nothing
   assert.equal((await res.json()).status, 401);
   assert.equal(written.length, 0);
   await stop();
+});
+
+test('testCredential for zai-coding gets the paas models route with bearer auth and no body', async () => {
+  const seen = [];
+  const fetchImpl = async (url, init) => { seen.push({ url, init }); return { ok: true, status: 200, statusText: 'OK', text: async () => '' }; };
+  assert.deepEqual(await testCredential(zaiCoding, 'zai-key', { fetchImpl }), { ok: true });
+  assert.equal(seen[0].url, 'https://api.z.ai/api/paas/v4/models');
+  assert.equal(seen[0].init.method, 'GET');
+  assert.equal(seen[0].init.headers.Authorization, 'Bearer zai-key');
+  assert.equal('body' in seen[0].init, false);
+});
+
+test('zai-coding: POST /save with a wrong key shows the 401 and writes nothing', async () => {
+  const { post, written, stop } = await boot({ provider: zaiCoding, status: 401 });
+  const res = await post('/save', { credential: 'wrong-key', profile: 'glm-5.3' });
+  assert.equal(res.status, 400);
+  assert.equal((await res.json()).status, 401);
+  assert.equal(written.length, 0);
+  await stop();
+});
+
+test('zai-coding: POST /save with a valid key writes the key and the chosen profile', async () => {
+  const { server, post, written } = await boot({ provider: zaiCoding });
+  const res = await post('/save', { credential: 'zai-key', profile: 'flash' });
+  assert.equal(res.status, 200, await res.text());
+  assert.deepEqual(written, [{ ANTHROPIC_AUTH_TOKEN: 'zai-key', WRAPPER_CODE_PROFILE: 'flash' }]);
+  assert.equal((await server.done).saved, true);
 });
