@@ -33,6 +33,7 @@ wrapper-code qwencloud-token       # launch Claude Code with the Qwen Cloud Toke
 wrapper-code openrouter            # launch Claude Code with any OpenRouter model (OpenAI, Google, Meta, Mistral, xAI...)
 wrapper-code kimi                  # launch Claude Code with Kimi through the Moonshot API (pay per token)
 wrapper-code kimi-code             # launch Claude Code with your Kimi Code subscription
+wrapper-code zai-coding            # launch Claude Code with your Z.ai GLM Coding Plan
 wrapper-code deepseek --resume     # anything after the provider is passed to claude
 wrapper-code claude                # your own Claude Code, unchanged, with its token usage recorded
 wrapper-code setup deepseek        # change the API key or model profile
@@ -46,6 +47,7 @@ FAMILY     PROVIDER         BILLING  STATUS          SELECTION
 anthropic  claude           plan     configured      -
 deepseek   deepseek         payg     configured      flash-1m
 gateway    openrouter       payg     not configured  -
+glm        zai-coding       plan     not configured  -
 kimi       kimi-code        plan     configured      k3-1m
 kimi       kimi             payg     not configured  -
 local      ollama           local    configured      qwen3-coder
@@ -66,6 +68,7 @@ The first time you launch a provider, a setup page opens in your browser on `127
 | `openrouter` | OpenRouter API key (openrouter.ai/keys), checked for free. The setup page lists every model OpenRouter serves, with a search box; models without tool calling are shown but cannot be selected. The chosen model is used for every role, subagents included. Billing through your OpenRouter credits. | [OpenRouter × Claude Code](https://openrouter.ai/docs/guides/guides/claude-code-integration) |
 | `kimi` | Moonshot API key from platform.kimi.ai, pay per token, checked for free against the models route. Profiles: `k3-1m` (default): Kimi K3 with 1M context, K2.7 Code for the Haiku tier. `k2.7-code`: Kimi K2.7 Code for every role, 256k context; turn thinking on in Claude Code (Alt+T / Option+T). | [Kimi × Claude Code](https://platform.kimi.ai/docs/guide/claude-code-kimi) |
 | `kimi-code` | Kimi Code API key (Kimi membership with Kimi Code, created in the Kimi Code Console), checked for free against the models route. Profiles: `k3-1m` (default): Kimi K3 with 1M context for every role. `k3-256k`: Kimi K3 with 256k context. | [Kimi Code × Claude Code](https://www.kimi.com/code/docs/en/third-party-tools/claude-code.html) |
+| `zai-coding` | Z.ai API key (GLM Coding Plan subscription, created under API Keys at z.ai), checked for free against the models route. With the plan active, every call counts against the plan quota, never the account balance or usage bundles. Profiles: `glm-5.3` (default): GLM 5.3, GLM 5.3 Flash for the Haiku tier. `glm-5.3-1m`: the same with 1M context. `flash`: GLM 5.3 Flash for every role, to save quota. | [Z.ai × Claude Code](https://docs.z.ai/devpack/tool/claude) |
 | `claude` | Nothing to set up. Runs your own Claude Code exactly as plain `claude` does (your login, your models, your settings; no variable is added or removed) with the usage receiver on, so your Anthropic usage shows up in `wrapper-code usage` next to the other providers. | [Claude Code monitoring](https://code.claude.com/docs/en/monitoring-usage) |
 
 Claude Code's system prompt and tools can exceed 32k tokens, and Ollama serves requests at its own runtime context (`OLLAMA_CONTEXT_LENGTH`, often 32k or less by default), not at the model's maximum. A request that does not fit is silently truncated and the model seems to ignore the prompt. Set Ollama's served context to at least 64k on the Ollama side, for example `OLLAMA_CONTEXT_LENGTH=65536 ollama serve`, or the context-length setting in the Ollama app.
@@ -80,7 +83,7 @@ Alibaba Model Studio and Qwen Cloud are one backend: a Token Plan key from eithe
 
 With OpenRouter you can pick OpenAI, Google, Meta, Mistral, xAI and other models through one key. To use a cheaper model for subagents and background work, edit `ANTHROPIC_DEFAULT_HAIKU_MODEL` and `CLAUDE_CODE_SUBAGENT_MODEL` in `~/.config/wrapper-code/openrouter.env`; the wrapper keeps hand-written keys. OpenRouter itself warns that Claude Code is tuned for Anthropic models, so other models may behave worse in long agentic sessions.
 
-GLM and MiniMax are reachable through OpenRouter today; dedicated providers for them are planned. A provider is a single data file in `src/providers/`; pull requests welcome.
+MiniMax is reachable through OpenRouter today; a dedicated provider is planned. Z.ai pay-as-you-go is not offered: on an account with a GLM Coding Plan, Claude Code calls always count against the plan. A provider is a single data file in `src/providers/`; pull requests welcome.
 
 ## Where things are stored
 
