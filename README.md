@@ -83,7 +83,7 @@ Alibaba Model Studio and Qwen Cloud are one backend: a Token Plan key from eithe
 
 With OpenRouter you can pick OpenAI, Google, Meta, Mistral, xAI and other models through one key. To use a cheaper model for subagents and background work, edit `ANTHROPIC_DEFAULT_HAIKU_MODEL` and `CLAUDE_CODE_SUBAGENT_MODEL` in `~/.config/wrapper-code/openrouter.env`; the wrapper keeps hand-written keys. OpenRouter itself warns that Claude Code is tuned for Anthropic models, so other models may behave worse in long agentic sessions.
 
-MiniMax is reachable through OpenRouter today; a dedicated provider is planned. Z.ai pay-as-you-go is not offered: on an account with a GLM Coding Plan, Claude Code calls always count against the plan. A provider is a single data file in `src/providers/`; pull requests welcome.
+MiniMax is reachable through OpenRouter today; a dedicated provider is planned. Z.ai pay-as-you-go is not offered: on an account with a GLM Coding Plan, Claude Code calls always count against the plan. A provider is a single data file in `src/providers/`; pull requests welcome. [CONTRIBUTING.md](CONTRIBUTING.md) explains the fields and the checklist.
 
 ## Where things are stored
 
@@ -161,7 +161,7 @@ How it works: the wrapper starts a tiny OpenTelemetry receiver on `127.0.0.1` fo
 npm test
 ```
 
-Tests never call a real provider API.
+Tests never call a real provider API. See [CONTRIBUTING.md](CONTRIBUTING.md) for adding a provider and the pull request checklist.
 
 ## Author
 
