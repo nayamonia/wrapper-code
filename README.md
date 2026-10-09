@@ -91,56 +91,6 @@ With OpenRouter you can pick OpenAI, Google, Meta, Mistral, xAI and other models
 
 MiniMax is reachable through OpenRouter today; a dedicated provider is planned. Z.ai pay-as-you-go is not offered: on an account with a GLM Coding Plan, Claude Code calls always count against the plan. A provider is a single data file in `src/providers/`; pull requests welcome. [CONTRIBUTING.md](CONTRIBUTING.md) explains the fields and the checklist.
 
-## Where things are stored
-
-One file per provider, containing only your choices: the key and profile for DeepSeek; for Ollama the model, the context snapshot, and the base URL only if it differs from the default `http://localhost:11434`:
-
-- macOS / Linux: `~/.config/wrapper-code/<provider>.env` (or `$XDG_CONFIG_HOME/wrapper-code/`), mode `600`
-- Windows: `%APPDATA%\wrapper-code\<provider>.env`
-
-Model names and the other variables come from the built-in catalog on every launch, so updating `wrapper-code` picks up provider changes without touching your file. Any extra `KEY=value` you add to the file by hand is passed through and overrides the catalog.
-
-## How it works
-
-1. Reads the provider definition (base URL, model variables, how to test a key).
-2. Reads your `<provider>.env`; runs the setup page if the key or model is missing.
-3. Builds an environment: your shell env + provider vars + profile vars (for Ollama, your saved model in the model variables) + your file. `ANTHROPIC_API_KEY` is removed so Claude Code cannot fall back to Anthropic auth.
-4. Finds `claude` on your `PATH` and runs it with that environment, forwarding your arguments and its exit code.
-
-Your global `~/.claude` (CLAUDE.md, skills, plugins, MCP servers, history) is shared with the provider session, since only environment variables change.
-
-## wrapper-code vs claude-code-router
-
-[claude-code-router](https://github.com/musistudio/claude-code-router) (CCR) is a local gateway that routes, rewrites and retries every request, for Claude Code and other agents. wrapper-code only sets up the environment of one session and gets out of the way: nothing between Claude Code and the provider, nothing running when you are not working, plain `claude` untouched. If you need routing, fallbacks or other agents, use CCR.
-
-<details>
-<summary><b>Read the full comparison</b></summary>
-
-[claude-code-router](https://github.com/musistudio/claude-code-router) (CCR) is the best-known way to run Claude Code on other models. It is a local gateway: a background service on `127.0.0.1:3456` receives every request from Claude Code (and from Codex, Kimi CLI, OpenCode and other agents), decides per request which provider and model to call, and can rewrite, retry, fall back to another model or key, translate to OpenAI- and Gemini-style APIs, and add vision, web search or MCP tools to a model that lacks them. It has a management UI, request logs with cost estimates, a desktop app and Docker images. If you need any of that, use CCR.
-
-wrapper-code wants to solve a smaller problem: start one Claude Code session on one other provider, with nothing changed for your normal Claude Code and nothing extra running. It sets the provider's `ANTHROPIC_BASE_URL`, key and model variables in the environment of one `claude` process and gets out of the way. That is the whole design, and it is where its advantages come from:
-
-- **Nothing between Claude Code and the model.** Requests go straight to the provider's endpoint. There is no local process to parse, rewrite and re-stream every request and response, and none that can be down. CCR's documentation lists its running service as a prerequisite for a Claude Code launched from it.
-- **Your prompts stay between Claude Code and the provider.** wrapper-code never sees them; the only thing it receives is Claude Code's own token counts, over a loopback port with a random per-session token. CCR's gateway sees every request, and its request logs store request and response bodies (configurable: all, errors only or none; kept for the current day).
-- **Nothing runs when you are not working.** No daemon, no desktop app, no database, no port left open. When `claude` exits, wrapper-code prints the usage block and exits too.
-- **Plain `claude` cannot be hijacked.** Nothing is written under `~/.claude`, and there is no "system default" mode, so no setting could make your normal Claude Code talk to another backend. CCR has such a scope; its own guide recommends starting with "only opened from CCR" for the same reason.
-- **Side by side.** Each session carries its own environment, so `wrapper-code deepseek`, `wrapper-code ollama` and plain `claude` can run at the same time in three terminals.
-- **The provider's integration, unchanged.** Each provider definition follows the provider's published Claude Code setup (linked in the Providers table), and what reaches Claude Code is what the provider's endpoint sends: streaming, tool calls, caching and thinking as the provider implements them, with no translation layer in between.
-- **Small and readable.** One npm package with no runtime dependencies (27 files, about 100 kB, Node.js 18+). The whole configuration is one environment file per provider that you can `cat`; export the same variables by hand and you get the same session, with or without wrapper-code.
-
-What wrapper-code does not do, by design: per-request routing, fallbacks, retries, key rotation, several providers in one session, protocol translation (the provider must speak the Anthropic Messages API), other agents than Claude Code. This reflects CCR 3.1 and its documentation (September 2026); check its repository for the current state.
-
-Both can be installed at once. wrapper-code does not know about CCR; if a CCR profile is set as "system default", check that it did not add `ANTHROPIC_BASE_URL` to the `env` block of `~/.claude/settings.json`, because settings there win over the variables wrapper-code sets (see Notes).
-
-</details>
-
-## Notes
-
-- `~/.claude` is shared, so `env` entries in `~/.claude/settings.json` (and any `apiKeyHelper`) still apply inside the provider session and can override the provider variables. If a session talks to the wrong backend, check there first.
-- Ctrl+C is passed through to `claude`; the wrapper itself keeps running until `claude` exits.
-- If a provider file is broken (for example a pasted bare key), `wrapper-code setup <provider>` replaces it with a fresh one.
-- Before `claude` starts, wrapper-code shows a sub-second 8-bit splash. It only appears on a color terminal at least 72 columns wide. Set `WRAPPER_CODE_NO_SPLASH=1` (or the standard `NO_COLOR`) to skip it.
-
 ## Claude accounts
 
 Several Claude logins (Pro, Max, Team or Enterprise) can live side by side, without touching the login of plain `claude`. macOS and Linux only.
@@ -159,6 +109,31 @@ Several Claude logins (Pro, Max, Team or Enterprise) can live side by side, with
 **Variables that would override the account:** `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN` and the Bedrock, Vertex and Foundry switches are removed from these sessions, and wrapper-code says which ones it removed.
 
 Console sign-ins made without an API key are stored outside the config folder, in `~/.config/anthropic`, and are shared by every account, so they are not supported here.
+
+## Where things are stored
+
+One file per provider, containing only your choices: the key and profile for DeepSeek; for Ollama the model, the context snapshot, and the base URL only if it differs from the default `http://localhost:11434`:
+
+- macOS / Linux: `~/.config/wrapper-code/<provider>.env` (or `$XDG_CONFIG_HOME/wrapper-code/`), mode `600`
+- Windows: `%APPDATA%\wrapper-code\<provider>.env`
+
+Model names and the other variables come from the built-in catalog on every launch, so updating `wrapper-code` picks up provider changes without touching your file. Any extra `KEY=value` you add to the file by hand is passed through and overrides the catalog.
+
+## How it works
+
+1. Reads the provider definition (base URL, model variables, how to test a key).
+2. Reads your `<provider>.env`; runs the setup page if the key or model is missing.
+3. Builds an environment: your shell env + provider vars + profile vars (for Ollama, your saved model in the model variables) + your file. `ANTHROPIC_API_KEY` is removed so Claude Code cannot fall back to Anthropic auth.
+4. Finds `claude` on your `PATH` and runs it with that environment, forwarding your arguments and its exit code.
+
+Your global `~/.claude` (CLAUDE.md, skills, plugins, MCP servers, history) is shared with the provider session, since only environment variables change.
+
+## Notes
+
+- `~/.claude` is shared, so `env` entries in `~/.claude/settings.json` (and any `apiKeyHelper`) still apply inside the provider session and can override the provider variables. If a session talks to the wrong backend, check there first.
+- Ctrl+C is passed through to `claude`; the wrapper itself keeps running until `claude` exits.
+- If a provider file is broken (for example a pasted bare key), `wrapper-code setup <provider>` replaces it with a fresh one.
+- Before `claude` starts, wrapper-code shows a sub-second 8-bit splash. It only appears on a color terminal at least 72 columns wide. Set `WRAPPER_CODE_NO_SPLASH=1` (or the standard `NO_COLOR`) to skip it.
 
 ## Token usage
 
@@ -187,6 +162,31 @@ npm test
 ```
 
 Tests never call a real provider API. See [CONTRIBUTING.md](CONTRIBUTING.md) for adding a provider and the pull request checklist.
+
+## wrapper-code vs claude-code-router
+
+[claude-code-router](https://github.com/musistudio/claude-code-router) (CCR) is a local gateway that routes, rewrites and retries every request, for Claude Code and other agents. wrapper-code only sets up the environment of one session and gets out of the way: nothing between Claude Code and the provider, nothing running when you are not working, plain `claude` untouched. If you need routing, fallbacks or other agents, use CCR.
+
+<details>
+<summary><b>Read the full comparison</b></summary>
+
+[claude-code-router](https://github.com/musistudio/claude-code-router) (CCR) is the best-known way to run Claude Code on other models. It is a local gateway: a background service on `127.0.0.1:3456` receives every request from Claude Code (and from Codex, Kimi CLI, OpenCode and other agents), decides per request which provider and model to call, and can rewrite, retry, fall back to another model or key, translate to OpenAI- and Gemini-style APIs, and add vision, web search or MCP tools to a model that lacks them. It has a management UI, request logs with cost estimates, a desktop app and Docker images. If you need any of that, use CCR.
+
+wrapper-code wants to solve a smaller problem: start one Claude Code session on one other provider, with nothing changed for your normal Claude Code and nothing extra running. It sets the provider's `ANTHROPIC_BASE_URL`, key and model variables in the environment of one `claude` process and gets out of the way. That is the whole design, and it is where its advantages come from:
+
+- **Nothing between Claude Code and the model.** Requests go straight to the provider's endpoint. There is no local process to parse, rewrite and re-stream every request and response, and none that can be down. CCR's documentation lists its running service as a prerequisite for a Claude Code launched from it.
+- **Your prompts stay between Claude Code and the provider.** wrapper-code never sees them; the only thing it receives is Claude Code's own token counts, over a loopback port with a random per-session token. CCR's gateway sees every request, and its request logs store request and response bodies (configurable: all, errors only or none; kept for the current day).
+- **Nothing runs when you are not working.** No daemon, no desktop app, no database, no port left open. When `claude` exits, wrapper-code prints the usage block and exits too.
+- **Plain `claude` cannot be hijacked.** Nothing is written under `~/.claude`, and there is no "system default" mode, so no setting could make your normal Claude Code talk to another backend. CCR has such a scope; its own guide recommends starting with "only opened from CCR" for the same reason.
+- **Side by side.** Each session carries its own environment, so `wrapper-code deepseek`, `wrapper-code ollama` and plain `claude` can run at the same time in three terminals.
+- **The provider's integration, unchanged.** Each provider definition follows the provider's published Claude Code setup (linked in the Providers table), and what reaches Claude Code is what the provider's endpoint sends: streaming, tool calls, caching and thinking as the provider implements them, with no translation layer in between.
+- **Small and readable.** One npm package with no runtime dependencies (27 files, about 100 kB, Node.js 18+). The whole configuration is one environment file per provider that you can `cat`; export the same variables by hand and you get the same session, with or without wrapper-code.
+
+What wrapper-code does not do, by design: per-request routing, fallbacks, retries, key rotation, several providers in one session, protocol translation (the provider must speak the Anthropic Messages API), other agents than Claude Code. This reflects CCR 3.1 and its documentation (September 2026); check its repository for the current state.
+
+Both can be installed at once. wrapper-code does not know about CCR; if a CCR profile is set as "system default", check that it did not add `ANTHROPIC_BASE_URL` to the `env` block of `~/.claude/settings.json`, because settings there win over the variables wrapper-code sets (see Notes).
+
+</details>
 
 ## Author
 
