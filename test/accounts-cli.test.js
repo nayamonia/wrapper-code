@@ -73,18 +73,18 @@ test('accounts add removes the dir when login fails and exits with its code', as
   await assert.rejects(stat(accountDir('falha', cfg)), { code: 'ENOENT' });
 });
 
-test('accounts lists name, e-mail and last use from usage', async () => {
+test('accounts lists name, e-mail, organization and last use from usage', async () => {
   const { deps, cfg } = await setup();
   await createAccountDir(accountDir('trabalho', cfg), { name: 'trabalho', createdAt: 'x', temp: false });
-  await writeFile(path.join(accountDir('trabalho', cfg), '.claude.json'), JSON.stringify({ oauthAccount: { emailAddress: 'eu@empresa.com' } }));
+  await writeFile(path.join(accountDir('trabalho', cfg), '.claude.json'), JSON.stringify({ oauthAccount: { emailAddress: 'eu@empresa.com', organizationName: 'CD2 Tech' } }));
   await createAccountDir(accountDir('pessoal', cfg), { name: 'pessoal', createdAt: 'x', temp: false });
   await appendUsage([{ ts: '2026-10-08T10:00:00Z', sessionId: 's', provider: 'claude', selection: 'trabalho', model: 'm', inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheCreationTokens: 0 }], cfg);
   const d = deps();
   assert.equal(await main(['accounts'], d), 0);
   const lines = d.stdout.text().trimEnd().split('\n');
-  assert.match(lines[0], /^ACCOUNT +EMAIL +LAST USED$/);
-  assert.match(lines[1], /^pessoal +- +never$/);
-  assert.match(lines[2], /^trabalho +eu@empresa\.com +2026-10-08$/);
+  assert.match(lines[0], /^ACCOUNT +EMAIL +ORG +LAST USED$/);
+  assert.match(lines[1], /^pessoal +- +- +never$/);
+  assert.match(lines[2], /^trabalho +eu@empresa\.com +CD2 Tech +2026-10-08$/);
 });
 
 test('accounts sweeps leftover temp sessions and says how many', async () => {
@@ -300,4 +300,20 @@ test('claude --temp keeps claude exit code when the temp folder cannot be delete
   } finally {
     await chmod(tmpRoot, 0o700);
   }
+});
+
+test('accounts add and remove name the organization next to the e-mail', { skip: isWin }, async () => {
+  const { deps, cfg } = await setup();
+  const login = async (sub, o) => {
+    if (sub === 'login') await writeFile(path.join(o.configDir, '.claude.json'), JSON.stringify({ oauthAccount: { emailAddress: 'eu@duel.com.br', organizationName: 'CD2 Tech' } }));
+    return { code: 0 };
+  };
+  const d = deps({ authImpl: login });
+  assert.equal(await main(['accounts', 'add', 'time'], d), 0);
+  assert.match(d.stdout.text(), /Account "time" saved \(eu@duel\.com\.br, CD2 Tech\)\./);
+  const asked = [];
+  const d2 = deps({ authImpl: login, confirmImpl: async (q) => { asked.push(q); return true; } });
+  assert.equal(await main(['accounts', 'remove', 'time'], d2), 0);
+  assert.match(asked[0], /^Remove account time \(eu@duel\.com\.br, CD2 Tech\)\? /);
+  await assert.rejects(stat(accountDir('time', cfg)), { code: 'ENOENT' });
 });

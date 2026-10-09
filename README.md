@@ -146,7 +146,8 @@ Several Claude logins (Pro, Max, Team or Enterprise) can live side by side, with
 - `wrapper-code accounts add <name>` creates an account and runs `claude auth login` for it.
 - `wrapper-code claude --account <name> [claude args...]` starts your Claude Code with that account.
 - `wrapper-code claude --temp [claude args...]` logs in for one session. When it ends, the login is logged out and its folder deleted. If the logout fails, the folder is kept and its path printed; the next `--temp` or `accounts` tries again.
-- `wrapper-code accounts` lists the accounts, and `wrapper-code accounts remove <name>` logs one out and deletes it.
+- `wrapper-code accounts` lists the accounts with their e-mail, organization and last use, and `wrapper-code accounts remove <name> [--yes]` logs one out and deletes it (`--yes` skips the question, and is required without a terminal).
+- One e-mail can belong to several organizations, a personal plan and a Team for example. Add one account per organization (`accounts add pessoal`, `accounts add time`) and pick the organization in the login page's selector; the `ORG` column tells them apart.
 
 **How the accounts are kept:**
 - Each account is its own `CLAUDE_CONFIG_DIR` under `~/.config/wrapper-code/accounts/`. Claude Code keeps its login there, and on macOS in a Keychain entry of its own.

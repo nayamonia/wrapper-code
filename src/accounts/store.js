@@ -69,13 +69,16 @@ export async function removeAccountDir(dir) {
   await rm(dir, { recursive: true, force: true });
 }
 
-// The account's .claude.json holds its metadata (not its token); the e-mail is there.
-export async function accountEmail(dir) {
+// The account's .claude.json holds its metadata (not its token): e-mail and organization.
+// One e-mail can belong to several organizations (a personal plan and a Team, say), so the
+// organization is what tells two such accounts apart.
+const text = (v) => (typeof v === 'string' && v ? v : null);
+
+export async function accountInfo(dir) {
   try {
-    const data = JSON.parse(await readFile(path.join(dir, '.claude.json'), 'utf8'));
-    const email = data?.oauthAccount?.emailAddress;
-    return typeof email === 'string' && email ? email : null;
+    const account = JSON.parse(await readFile(path.join(dir, '.claude.json'), 'utf8'))?.oauthAccount;
+    return { email: text(account?.emailAddress), org: text(account?.organizationName) };
   } catch {
-    return null;
+    return { email: null, org: null };
   }
 }

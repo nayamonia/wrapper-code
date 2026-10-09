@@ -1,5 +1,5 @@
 import { stat } from 'node:fs/promises';
-import { validateName, accountDir, createAccountDir, listAccounts, removeAccountDir, accountEmail } from './store.js';
+import { validateName, accountDir, createAccountDir, listAccounts, removeAccountDir, accountInfo } from './store.js';
 import { linkShared, syncMcpServers } from './share.js';
 import { sweepTemp, createTempAccount, teardownTemp } from './temp.js';
 import { accountEnv } from './env.js';
@@ -34,6 +34,11 @@ export function unknownAccount(name, accounts, stderr) {
   return 1;
 }
 
+// "e-mail, organization", whichever parts are known, or "-".
+function describe({ email, org }) {
+  return [email, org].filter(Boolean).join(', ') || '-';
+}
+
 async function exists(dir) {
   try {
     await stat(dir);
@@ -52,10 +57,11 @@ async function list(ctx) {
     return 0;
   }
   const { events } = await readUsage(cfg);
-  const rows = [['ACCOUNT', 'EMAIL', 'LAST USED']];
+  const rows = [['ACCOUNT', 'EMAIL', 'ORG', 'LAST USED']];
   for (const { name, dir } of accounts) {
     const last = events.filter((e) => e.provider === 'claude' && e.selection === name).map((e) => e.ts).sort().pop();
-    rows.push([name, (await accountEmail(dir)) || '-', last ? last.slice(0, 10) : 'never']);
+    const { email, org } = await accountInfo(dir);
+    rows.push([name, email || '-', org || '-', last ? last.slice(0, 10) : 'never']);
   }
   stdout.write(formatTable(rows));
   return 0;
@@ -101,8 +107,8 @@ async function add(name, ctx) {
     stderr.write(`Login did not finish; account "${name}" was not saved.\n`);
     return code;
   }
-  const email = await accountEmail(dir);
-  stdout.write(`Account "${name}" saved${email ? ` (${email})` : ''}. Start it with: wrapper-code claude --account ${name}\n`);
+  const who = describe(await accountInfo(dir));
+  stdout.write(`Account "${name}" saved${who === '-' ? '' : ` (${who})`}. Start it with: wrapper-code claude --account ${name}\n`);
   return 0;
 }
 
@@ -118,9 +124,9 @@ async function remove(args, ctx) {
     stderr.write(ctx.installHint);
     return 1;
   }
-  const email = (await accountEmail(account.dir)) || '-';
+  const who = describe(await accountInfo(account.dir));
   if (!yes) {
-    const answer = await confirm(`Remove account ${name} (${email})? It will be logged out and its sessions deleted. [y/N] `);
+    const answer = await confirm(`Remove account ${name} (${who})? It will be logged out and its sessions deleted. [y/N] `);
     if (answer === null) {
       stderr.write('accounts remove: not a terminal; pass --yes to remove without asking\n');
       return 1;

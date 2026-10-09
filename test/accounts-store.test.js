@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
   MARKER, validateName, accountsDir, accountDir, readMarker, createAccountDir,
-  listAccounts, removeAccountDir, accountEmail,
+  listAccounts, removeAccountDir, accountInfo,
 } from '../src/accounts/store.js';
 
 const isWin = process.platform === 'win32';
@@ -76,13 +76,13 @@ test('removeAccountDir deletes the dir and never follows its symlinks', { skip: 
   assert.deepEqual((await readdir(shared)).sort(), ['CLAUDE.md', 'skills']);
 });
 
-test('accountEmail reads oauthAccount.emailAddress, null when absent or unreadable', async () => {
+test('accountInfo reads the e-mail and the organization, null for what is absent or unreadable', async () => {
   const dir = await tmp();
-  assert.equal(await accountEmail(dir), null);
-  await writeFile(path.join(dir, '.claude.json'), JSON.stringify({ oauthAccount: { emailAddress: 'eu@empresa.com' } }));
-  assert.equal(await accountEmail(dir), 'eu@empresa.com');
-  await writeFile(path.join(dir, '.claude.json'), JSON.stringify({ other: 1 }));
-  assert.equal(await accountEmail(dir), null);
+  assert.deepEqual(await accountInfo(dir), { email: null, org: null });
+  await writeFile(path.join(dir, '.claude.json'), JSON.stringify({ oauthAccount: { emailAddress: 'eu@duel.com.br', organizationName: 'CD2 Tech' } }));
+  assert.deepEqual(await accountInfo(dir), { email: 'eu@duel.com.br', org: 'CD2 Tech' });
+  await writeFile(path.join(dir, '.claude.json'), JSON.stringify({ oauthAccount: { emailAddress: 'eu@duel.com.br', organizationName: '' } }));
+  assert.deepEqual(await accountInfo(dir), { email: 'eu@duel.com.br', org: null });
   await writeFile(path.join(dir, '.claude.json'), 'not json');
-  assert.equal(await accountEmail(dir), null);
+  assert.deepEqual(await accountInfo(dir), { email: null, org: null });
 });
