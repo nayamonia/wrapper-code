@@ -49,17 +49,22 @@ export async function linkShared(accountDir, { home }) {
 
 const isPlainObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 
-// User-scope MCP servers live in ~/.claude.json next to the login metadata, so that file is
-// never shared; only its mcpServers key is copied into the account's own .claude.json.
-export async function syncMcpServers(accountDir, { home, warn }) {
+// First-run state: without it a new account opens on Claude Code's welcome and theme picker.
+// Copied only when the account lacks it, so a choice made inside the account is kept.
+// Folder trust (per project, under "projects") is never copied: it stays a per-account decision.
+const ONBOARDING_KEYS = ['hasCompletedOnboarding', 'lastOnboardingVersion', 'theme'];
+
+// ~/.claude.json holds the login metadata next to the user's MCP servers and onboarding
+// state, so the file is never shared: only those keys are copied into the account's own
+// .claude.json. MCP servers are replaced every time; onboarding keys fill gaps.
+export async function syncUserConfig(accountDir, { home, warn }) {
   let source;
   try {
     source = JSON.parse(await readFile(path.join(home, '.claude.json'), 'utf8'));
   } catch {
     return 'skipped';
   }
-  const servers = isPlainObject(source) ? source.mcpServers : undefined;
-  if (!isPlainObject(servers)) return 'skipped';
+  if (!isPlainObject(source)) return 'skipped';
 
   const file = path.join(accountDir, '.claude.json');
   let current = {};
@@ -68,16 +73,24 @@ export async function syncMcpServers(accountDir, { home, warn }) {
   } catch (err) {
     if (err.code !== 'ENOENT') {
       if (!(err instanceof SyntaxError)) throw err;
-      warn(`${file} is not valid JSON; your MCP servers were not copied into this account.`);
+      warn(`${file} is not valid JSON; your MCP servers and settings were not copied into this account.`);
       return 'invalid';
     }
   }
   if (!isPlainObject(current)) {
-    warn(`${file} is not a JSON object; your MCP servers were not copied into this account.`);
+    warn(`${file} is not a JSON object; your MCP servers and settings were not copied into this account.`);
     return 'invalid';
   }
+
+  const patch = {};
+  if (isPlainObject(source.mcpServers)) patch.mcpServers = source.mcpServers;
+  for (const key of ONBOARDING_KEYS) {
+    if (source[key] !== undefined && current[key] === undefined) patch[key] = source[key];
+  }
+  if (!Object.keys(patch).length) return 'skipped';
+
   const tmp = `${file}.${process.pid}.tmp`;
-  await writeFile(tmp, `${JSON.stringify({ ...current, mcpServers: servers }, null, 2)}\n`, { mode: 0o600 });
+  await writeFile(tmp, `${JSON.stringify({ ...current, ...patch }, null, 2)}\n`, { mode: 0o600 });
   await chmod(tmp, 0o600);
   await rename(tmp, file);
   return 'synced';

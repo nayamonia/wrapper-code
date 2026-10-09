@@ -1,6 +1,6 @@
 import { stat } from 'node:fs/promises';
 import { validateName, accountDir, createAccountDir, listAccounts, removeAccountDir, accountInfo } from './store.js';
-import { linkShared, syncMcpServers } from './share.js';
+import { linkShared, syncUserConfig } from './share.js';
 import { sweepTemp, createTempAccount, teardownTemp } from './temp.js';
 import { accountEnv } from './env.js';
 import { readUsage } from '../usage/store.js';
@@ -13,7 +13,7 @@ const USAGE = 'Usage: wrapper-code accounts [add <name> | remove <name> [--yes]]
 export async function prepareShared(dir, { home, stderr }) {
   try {
     await linkShared(dir, { home });
-    await syncMcpServers(dir, { home, warn: (m) => stderr.write(`wrapper-code: ${m}\n`) });
+    await syncUserConfig(dir, { home, warn: (m) => stderr.write(`wrapper-code: ${m}\n`) });
   } catch (err) {
     throw new ConfigError(`could not prepare the account folder ${dir}: ${err.message}`);
   }

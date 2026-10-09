@@ -151,7 +151,7 @@ Several Claude logins (Pro, Max, Team or Enterprise) can live side by side, with
 
 **How the accounts are kept:**
 - Each account is its own `CLAUDE_CONFIG_DIR` under `~/.config/wrapper-code/accounts/`. Claude Code keeps its login there, and on macOS in a Keychain entry of its own.
-- **Shared with your usual Claude Code, by symlink:** everything in `~/.claude`, which covers settings, CLAUDE.md and the files it imports, plugins, skills, agents, commands and hooks. Your user MCP servers are copied from `~/.claude.json` before each session.
+- **Shared with your usual Claude Code, by symlink:** everything in `~/.claude`, which covers settings, CLAUDE.md and the files it imports, plugins, skills, agents, commands and hooks. Your user MCP servers are copied from `~/.claude.json` before each session, and so is your completed onboarding, so a new account opens straight on the prompt. Folder trust is still asked once per account.
 - **Kept per account:** the login, the session history and Claude Code's runtime state.
 
 **Variables that would override the account:** `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN` and the Bedrock, Vertex and Foundry switches are removed from these sessions, and wrapper-code says which ones it removed.

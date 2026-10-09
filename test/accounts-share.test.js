@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, readFile, readlink, lstat, readdir, symlink, stat, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { PER_ACCOUNT, linkShared, syncMcpServers } from '../src/accounts/share.js';
+import { PER_ACCOUNT, linkShared, syncUserConfig } from '../src/accounts/share.js';
 
 const isWin = process.platform === 'win32';
 const tmp = () => mkdtemp(path.join(tmpdir(), 'wc-share-'));
@@ -77,39 +77,57 @@ async function mcpFixture() {
   return { home, dir, file: path.join(dir, '.claude.json') };
 }
 
-test('syncMcpServers copies mcpServers and keeps the other account keys, mode 0600', { skip: isWin }, async () => {
+test('syncUserConfig copies mcpServers and keeps the other account keys, mode 0600', { skip: isWin }, async () => {
   const { home, dir, file } = await mcpFixture();
   await writeFile(path.join(home, '.claude.json'), JSON.stringify({ mcpServers: { a: { command: 'x' } }, oauthAccount: { emailAddress: 'main@x' } }));
   await writeFile(file, JSON.stringify({ oauthAccount: { emailAddress: 'work@x' }, mcpServers: { old: {} } }));
-  assert.equal(await syncMcpServers(dir, { home, warn: () => assert.fail('no warning') }), 'synced');
+  assert.equal(await syncUserConfig(dir, { home, warn: () => assert.fail('no warning') }), 'synced');
   assert.deepEqual(JSON.parse(await readFile(file, 'utf8')), { oauthAccount: { emailAddress: 'work@x' }, mcpServers: { a: { command: 'x' } } });
   assert.equal((await stat(file)).mode & 0o777, 0o600);
 });
 
-test('syncMcpServers creates the account file when it is missing', async () => {
+test('syncUserConfig creates the account file when it is missing', async () => {
   const { home, dir, file } = await mcpFixture();
   await writeFile(path.join(home, '.claude.json'), JSON.stringify({ mcpServers: { a: {} } }));
-  assert.equal(await syncMcpServers(dir, { home, warn: () => {} }), 'synced');
+  assert.equal(await syncUserConfig(dir, { home, warn: () => {} }), 'synced');
   assert.deepEqual(JSON.parse(await readFile(file, 'utf8')), { mcpServers: { a: {} } });
 });
 
-test('syncMcpServers leaves the account alone when the source is missing, empty or invalid', async () => {
+test('syncUserConfig leaves the account alone when the source is missing, empty or invalid', async () => {
   for (const source of [null, '{}', 'not json', JSON.stringify({ mcpServers: [] })]) {
     const { home, dir, file } = await mcpFixture();
     if (source !== null) await writeFile(path.join(home, '.claude.json'), source);
     await writeFile(file, JSON.stringify({ mcpServers: { keep: {} } }));
-    assert.equal(await syncMcpServers(dir, { home, warn: () => {} }), 'skipped', String(source));
+    assert.equal(await syncUserConfig(dir, { home, warn: () => {} }), 'skipped', String(source));
     assert.deepEqual(JSON.parse(await readFile(file, 'utf8')), { mcpServers: { keep: {} } });
   }
 });
 
-test('syncMcpServers warns and skips when the account file is not valid JSON', async () => {
+test('syncUserConfig warns and skips when the account file is not valid JSON', async () => {
   const { home, dir, file } = await mcpFixture();
   await writeFile(path.join(home, '.claude.json'), JSON.stringify({ mcpServers: { a: {} } }));
   await writeFile(file, '{broken');
   const warnings = [];
-  assert.equal(await syncMcpServers(dir, { home, warn: (m) => warnings.push(m) }), 'invalid');
+  assert.equal(await syncUserConfig(dir, { home, warn: (m) => warnings.push(m) }), 'invalid');
   assert.equal(await readFile(file, 'utf8'), '{broken');
   assert.equal(warnings.length, 1);
-  assert.match(warnings[0], /MCP servers were not copied/);
+  assert.match(warnings[0], /MCP servers and settings were not copied/);
+});
+
+test('syncUserConfig copies the onboarding state the account lacks, without overriding its own', async () => {
+  const { home, dir, file } = await mcpFixture();
+  await writeFile(path.join(home, '.claude.json'), JSON.stringify({ hasCompletedOnboarding: true, lastOnboardingVersion: '2.0.49', theme: 'dark', userID: 'main-user' }));
+  assert.equal(await syncUserConfig(dir, { home, warn: () => assert.fail('no warning') }), 'synced');
+  assert.deepEqual(JSON.parse(await readFile(file, 'utf8')), { hasCompletedOnboarding: true, lastOnboardingVersion: '2.0.49', theme: 'dark' });
+
+  await writeFile(file, JSON.stringify({ hasCompletedOnboarding: true, lastOnboardingVersion: '2.1.295', theme: 'light' }));
+  assert.equal(await syncUserConfig(dir, { home, warn: () => {} }), 'skipped');
+  assert.deepEqual(JSON.parse(await readFile(file, 'utf8')), { hasCompletedOnboarding: true, lastOnboardingVersion: '2.1.295', theme: 'light' });
+});
+
+test('syncUserConfig copies onboarding even when the source has no MCP servers', async () => {
+  const { home, dir, file } = await mcpFixture();
+  await writeFile(path.join(home, '.claude.json'), JSON.stringify({ hasCompletedOnboarding: true }));
+  assert.equal(await syncUserConfig(dir, { home, warn: () => {} }), 'synced');
+  assert.deepEqual(JSON.parse(await readFile(file, 'utf8')), { hasCompletedOnboarding: true });
 });
