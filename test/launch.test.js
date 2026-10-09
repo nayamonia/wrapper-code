@@ -171,3 +171,21 @@ test('launchClaude exit with SIGTERM signal resolves with signal', async () => {
   assert.equal(result.code, 1);
   assert.equal(result.signal, 'SIGTERM');
 });
+
+test('launchClaude forwards SIGHUP to child and removes its handler after exit', async () => {
+  const kills = [];
+  let exitCb;
+  const before = process.listenerCount('SIGHUP');
+  const fakeSpawn = () => ({
+    on: (event, cb) => { if (event === 'exit') exitCb = cb; },
+    kill: (sig) => { kills.push(sig); },
+  });
+  const promise = launchClaude({ claudePath: '/usr/bin/claude', args: [], env: {}, spawnImpl: fakeSpawn });
+  await new Promise((r) => setImmediate(r));
+  process.emit('SIGHUP');
+  await new Promise((r) => setImmediate(r));
+  assert.deepEqual(kills, ['SIGHUP']);
+  exitCb(0, null);
+  await promise;
+  assert.equal(process.listenerCount('SIGHUP'), before);
+});

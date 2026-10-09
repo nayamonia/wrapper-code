@@ -45,11 +45,18 @@ export function launchClaude({ claudePath, args, env, spawnImpl = spawn }) {
     const onSigterm = () => {
       child.kill('SIGTERM');
     };
+    // A closed terminal sends SIGHUP: pass it on so claude exits and the wrapper can finish
+    // (record usage, end a temporary login) instead of dying first.
+    const onSighup = () => {
+      child.kill('SIGHUP');
+    };
     process.on('SIGINT', onSigint);
     process.on('SIGTERM', onSigterm);
+    process.on('SIGHUP', onSighup);
     const cleanup = () => {
       process.removeListener('SIGINT', onSigint);
       process.removeListener('SIGTERM', onSigterm);
+      process.removeListener('SIGHUP', onSighup);
     };
     child.on('error', (error) => {
       cleanup();
