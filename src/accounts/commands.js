@@ -86,7 +86,16 @@ async function add(name, ctx) {
     throw err;
   }
   stdout.write(`Logging in account "${name}". Your usual claude login is not touched.\n`);
-  const { code } = await authImpl('login', { claudePath, configDir: dir, env: accountEnv(env, dir).env, inherit: true });
+  // Ctrl-C reaches the child (it shares the terminal); keep the wrapper alive so the cleanup below runs.
+  const signals = ['SIGINT', 'SIGTERM', 'SIGHUP'];
+  const ignore = () => {};
+  signals.forEach((s) => process.on(s, ignore));
+  let code;
+  try {
+    ({ code } = await authImpl('login', { claudePath, configDir: dir, env: accountEnv(env, dir).env, inherit: true }));
+  } finally {
+    signals.forEach((s) => process.off(s, ignore));
+  }
   if (code !== 0) {
     await removeAccountDir(dir);
     stderr.write(`Login did not finish; account "${name}" was not saved.\n`);
@@ -104,6 +113,11 @@ async function remove(args, ctx) {
   const accounts = await listAccounts(cfg);
   const account = accounts.find((a) => a.name === name);
   if (!account) return unknownAccount(name ?? '', accounts, stderr);
+  const claudePath = ctx.resolveClaudeImpl({ platform: ctx.platform, env });
+  if (!claudePath) {
+    stderr.write(ctx.installHint);
+    return 1;
+  }
   const email = (await accountEmail(account.dir)) || '-';
   if (!yes) {
     const answer = await confirm(`Remove account ${name} (${email})? It will be logged out and its sessions deleted. [y/N] `);
@@ -116,8 +130,7 @@ async function remove(args, ctx) {
       return 0;
     }
   }
-  const claudePath = ctx.resolveClaudeImpl({ platform: ctx.platform, env });
-  const result = claudePath ? await logoutWith({ authImpl, claudePath, env })(account.dir) : { code: 1 };
+  const result = await logoutWith({ authImpl, claudePath, env })(account.dir);
   await removeAccountDir(account.dir);
   if (result.code !== 0) {
     stderr.write(`wrapper-code: logout of "${name}" failed; its login may remain in the Keychain. Next time, run CLAUDE_CONFIG_DIR=<folder> claude auth logout before removing.\n`);

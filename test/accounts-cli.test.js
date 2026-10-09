@@ -153,3 +153,30 @@ test('--help documents accounts and the two claude flags', () => {
   assert.match(HELP, /wrapper-code claude --account <name>/);
   assert.match(HELP, /wrapper-code claude --temp/);
 });
+
+test('accounts remove without claude on PATH refuses before asking or deleting', async () => {
+  const { auth, deps, cfg } = await setup();
+  await createAccountDir(accountDir('a1', cfg), { name: 'a1', createdAt: 'x', temp: false });
+  const d = deps({ resolveClaudeImpl: () => null, confirmImpl: async () => assert.fail('must not ask') });
+  assert.equal(await main(['accounts', 'remove', 'a1', '--yes'], d), 1);
+  assert.match(d.stderr.text(), /claude not found on PATH/);
+  assert.equal(auth.length, 0);
+  assert.ok((await stat(accountDir('a1', cfg))).isDirectory());
+});
+
+test('accounts add survives Ctrl-C during login, removes the dir and restores signal handlers', { skip: isWin }, async () => {
+  const { deps, cfg } = await setup();
+  const sigs = ['SIGINT', 'SIGTERM', 'SIGHUP'];
+  const before = sigs.map((s) => process.listenerCount(s));
+  let during;
+  const d = deps({
+    authImpl: async () => {
+      during = sigs.map((s) => process.listenerCount(s));
+      return { code: 130 };
+    },
+  });
+  assert.equal(await main(['accounts', 'add', 'ctrlc'], d), 130);
+  sigs.forEach((_, i) => assert.ok(during[i] > before[i], sigs[i]));
+  await assert.rejects(stat(accountDir('ctrlc', cfg)), { code: 'ENOENT' });
+  assert.deepEqual(sigs.map((s) => process.listenerCount(s)), before);
+});
