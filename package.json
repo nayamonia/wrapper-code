@@ -1,6 +1,6 @@
 {
   "name": "wrapper-code",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Run the Claude Code CLI harness with other LLM providers, or with several Claude accounts at once, without touching your Claude Code configuration.",
   "type": "module",
   "bin": {
