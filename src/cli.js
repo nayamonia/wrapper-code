@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import { homedir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { createInterface } from 'node:readline/promises';
@@ -10,6 +10,9 @@ import { resolveClaude, launchClaude } from './launch.js';
 import { openBrowser } from './open.js';
 import { startSetupServer } from './setup/server.js';
 import { creditLine } from './credits.js';
+import { runAccountsCommand } from './accounts/commands.js';
+import { runAuth } from './accounts/auth.js';
+import { pidAlive } from './accounts/temp.js';
 import { showSplash, shouldSplash } from './splash.js';
 import { runUsage } from './usage/report.js';
 import { startUsageReceiver, TOKEN_HEADER as USAGE_TOKEN_HEADER } from './usage/receiver.js';
@@ -26,6 +29,12 @@ Run Claude Code with another LLM provider, without touching your Claude Code con
 Usage:
   wrapper-code <provider> [claude args...]   Launch Claude Code with <provider> (opens setup first if needed)
   wrapper-code claude [claude args...]       Launch your own Claude Code unchanged, only recording token usage
+  wrapper-code claude --account <name> [claude args...]
+                                             Launch your Claude Code logged in to a saved Claude account
+  wrapper-code claude --temp [claude args...]
+                                             Launch it with a one-off login, removed when the session ends
+  wrapper-code accounts [add <name> | remove <name> [--yes]]
+                                             List, add or remove saved Claude accounts (macOS, Linux)
   wrapper-code setup <provider>              Open the setup page to change the key or model profile
   wrapper-code list                          List providers and whether they are configured
   wrapper-code usage [--since 24h|7d|30d|all] [--provider <id>] [--by-day] [--json]
@@ -58,7 +67,7 @@ async function confirmOnTerminal(question) {
   }
 }
 
-const INSTALL_HINT = 'claude not found on PATH. Install Claude Code: npm install -g @anthropic-ai/claude-code\n';
+export const INSTALL_HINT = 'claude not found on PATH. Install Claude Code: npm install -g @anthropic-ai/claude-code\n';
 
 async function runSetup(provider, current, { cfg, stdout, stderr, openBrowserImpl, startSetupServerImpl }) {
   const server = await startSetupServerImpl({
@@ -142,6 +151,9 @@ export async function main(argv, deps = {}) {
     startUsageReceiverImpl = startUsageReceiver,
     nowImpl = Date.now,
     confirmImpl = confirmOnTerminal,
+    authImpl = runAuth,
+    tmpRoot = tmpdir(),
+    pidAliveImpl = pidAlive,
   } = deps;
   const cfg = { platform, env, ...(home ? { home } : {}) };
   const setupDeps = { cfg, stdout, stderr, openBrowserImpl, startSetupServerImpl };
@@ -163,6 +175,12 @@ export async function main(argv, deps = {}) {
     const canonical = (id) => resolveProvider(catalog, id)?.id ?? id;
     return runUsage(rest, { cfg, stdout, stderr, confirm: confirmImpl, display: (file) => displayPath(file, home || homedir()), canonical });
   }
+
+  const accountCtx = {
+    cfg, home: home || homedir(), env, platform, stdout, stderr, confirm: confirmImpl,
+    authImpl, resolveClaudeImpl, tmpRoot, pidAliveImpl, installHint: INSTALL_HINT,
+  };
+  if (first === 'accounts') return runAccountsCommand(rest, accountCtx);
 
   const ids = [...catalog.keys()];
   const unknown = (id) => {
