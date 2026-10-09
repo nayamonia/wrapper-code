@@ -45,7 +45,7 @@ export function renderSite({ catalog, version }) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>wrapper-code</title>
-<meta name="description" content="Run the Claude Code CLI harness with other LLM providers without touching your Claude Code configuration.">
+<meta name="description" content="Run the Claude Code CLI harness with other LLM providers, or with several Claude accounts at once, without touching your Claude Code configuration.">
 <link rel="icon" href="${faviconDataUri()}">
 <style>
   :root { --bg: ${PALETTE.bg}; --card: #15152a; --fg: ${PALETTE.white}; --muted: ${PALETTE.dim}; --line: #2b2b4a; --ink: ${PALETTE.ink}; --magenta: ${PALETTE.magenta}; --cyan: ${PALETTE.cyan}; --yellow: ${PALETTE.yellow}; }
@@ -111,7 +111,7 @@ export function renderSite({ catalog, version }) {
   <section class="hero" id="top">
     <div class="sprite" aria-hidden="true">${renderSvg(SPRITE)}</div>
     <h1>Run Claude Code with any LLM</h1>
-    <p class="lead">One command, your provider, zero changes to your Claude Code configuration. The provider's settings live only inside that session.</p>
+    <p class="lead">One command, your provider, zero changes to your Claude Code configuration. The provider's settings live only inside that session. Several Claude accounts, personal and Team, work side by side the same way.</p>
     <div class="install" id="install"><span class="p">$</span> npm install -g wrapper-code<br><span class="p">$</span> wrapper-code ${esc(exampleId)}</div>
     <div class="chips">${chips}</div>
   </section>

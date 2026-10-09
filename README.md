@@ -1,12 +1,14 @@
 # wrapper-code
 
-Run the [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI harness with other LLM providers, without touching your Claude Code configuration.
+Run the [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI harness with other LLM providers, or with several Claude accounts at once, without touching your Claude Code configuration.
 
 Website: [nayamonia.github.io/wrapper-code](https://nayamonia.github.io/wrapper-code/) · Package: [npmjs.com/package/wrapper-code](https://www.npmjs.com/package/wrapper-code)
 
 `wrapper-code deepseek` opens a normal interactive Claude Code session that talks to DeepSeek. Running `claude` directly still uses Anthropic, exactly as before. Nothing is written under `~/.claude`, and no variable leaks into your shell: the provider settings exist only inside that one session.
 
 Every session records its token usage on your machine, and `wrapper-code usage` adds it up by provider and model. `wrapper-code claude` starts your own Claude Code unchanged, so your Anthropic usage is counted in the same report.
+
+It also manages several Claude accounts at the same time, such as a personal Max plan and a company Team on the same e-mail. `wrapper-code claude --account work` opens a session logged in to one of them, with your usual settings, plugins and MCP servers, while plain `claude` stays on its own login. Sessions of different accounts run side by side in separate terminals. `wrapper-code claude --temp` logs in for one session only and removes the login on exit. See [Claude accounts](#claude-accounts) (macOS and Linux).
 
 ![The same prompt in two terminals: wrapper-code claude on the left, wrapper-code deepseek on the right; then wrapper-code usage lists the requests and tokens of both](https://nayamonia.github.io/wrapper-code/demo.gif)
 

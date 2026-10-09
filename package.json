@@ -1,7 +1,7 @@
 {
   "name": "wrapper-code",
   "version": "0.5.0",
-  "description": "Run the Claude Code CLI harness with other LLM providers (DeepSeek first) without touching your Claude Code configuration.",
+  "description": "Run the Claude Code CLI harness with other LLM providers, or with several Claude accounts at once, without touching your Claude Code configuration.",
   "type": "module",
   "bin": {
     "wrapper-code": "bin/wrapper-code.js"
