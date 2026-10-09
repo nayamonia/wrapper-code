@@ -23,9 +23,9 @@ test('renderSite builds a self-contained landing page from the brand, the catalo
   assert.match(row('ollama'), /Models discovered from your server at setup time/);
   assert.doesNotMatch(row('openrouter'), /your server/, 'a hosted catalog is not "your server"');
   assert.match(row('openrouter'), /Any model with tool calling, picked from the live catalog at setup time/);
-  assert.deepEqual([...html.matchAll(/<div class="box"><h3>([^<]+)<\/h3>/g)].map((m) => m[1]), ['Isolated', 'Side by side', 'Setup in the browser', 'Token usage', 'Claude accounts'], 'card order');
+  assert.deepEqual([...html.matchAll(/<div class="box"><h3>([^<]+)<\/h3>/g)].map((m) => m[1]), ['Isolated', 'Side by side', 'Claude accounts', 'Plan or pay per token', 'Setup in the browser', 'Token usage'], 'card order');
   assert.match(html, /<h3>Token usage<\/h3><p>[^<]*requests and tokens[^]*?<code>wrapper-code usage<\/code>[^]*?your machine/, 'usage card text');
-  assert.match(html, /\.grid \{ display: grid; grid-template-columns: repeat\(2, 1fr\);/, 'cards in two columns');
+  assert.match(html, /\.grid \{ display: grid; grid-template-columns: repeat\(3, 1fr\);/, 'six cards in two rows of three');
   assert.match(html, /<h3>Side by side<\/h3><p>[^<]*several Claude Code sessions at the same time/, 'card about parallel sessions with different LLMs');
   assert.match(html, /v0\.1\.0/);
   const compare = html.slice(html.indexOf('<section class="compare" id="compare">'), html.indexOf('<section class="how">'));

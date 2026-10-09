@@ -30,7 +30,7 @@
   .demo { margin: 36px 0 0; text-align: center; }
   .demo img { display: block; width: 100%; height: auto; border: 2px solid var(--ink); box-shadow: 4px 4px 0 var(--cyan); }
   .demo p { color: var(--muted); font-size: 14px; margin: 14px auto 0; max-width: 720px; }
-  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin: 40px 0; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 40px 0; }
   .box { background: var(--card); border: 1px solid var(--line); padding: 16px; }
   .box h3 { margin: 0 0 6px; color: var(--yellow); font-size: 15px; }
   .box p { margin: 0; color: #c9c9d6; font-size: 14px; }
@@ -57,6 +57,7 @@
   .how li { margin-bottom: 6px; }
   footer { margin: 48px 0 32px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; text-align: center; }
   footer a { color: inherit; }
+  @media (max-width: 960px) { .grid { grid-template-columns: repeat(2, 1fr); } }
   @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } table, thead, tbody, tr, td, th { display: block; } thead { display: none; } td { border-top: 0; padding: 4px 0; } tr { border-top: 1px solid var(--line); padding: 10px 0; } }
 </style>
 </head>
@@ -81,11 +82,12 @@
   </section>
 
   <section class="grid">
-    <div class="box"><h3>Isolated</h3><p>Only environment variables change, and only for that process. <code>claude</code> on its own keeps using Anthropic.</p></div>
-    <div class="box"><h3>Side by side</h3><p>Run several Claude Code sessions at the same time on one computer, each with a different LLM: <code>wrapper-code deepseek</code> in one terminal, <code>wrapper-code qwencloud</code> in another, plain <code>claude</code> in a third.</p></div>
+    <div class="box"><h3>Isolated</h3><p>Only environment variables change, and only for that process. Plain <code>claude</code> keeps using Anthropic, and nothing is written under <code>~/.claude</code>.</p></div>
+    <div class="box"><h3>Side by side</h3><p>Run several Claude Code sessions at the same time, each with its own LLM: <code>wrapper-code deepseek</code> in one terminal, <code>wrapper-code qwencloud</code> in another, plain <code>claude</code> in a third.</p></div>
+    <div class="box"><h3>Claude accounts</h3><p>Several Claude logins at once, a personal plan and a Team on the same e-mail included. <code>wrapper-code claude --account work</code> opens one, <code>--temp</code> logs in for a single session. Plain <code>claude</code> keeps its own.</p></div>
+    <div class="box"><h3>Plan or pay per token</h3><p>Use a subscription you already pay for, such as Kimi Code, the Qwen Token Plan or the GLM Coding Plan, or pay per token. <code>wrapper-code list</code> shows how each provider bills.</p></div>
     <div class="box"><h3>Setup in the browser</h3><p>The first launch opens a local page: paste the key, pick a model profile, and the key is tested before anything is saved.</p></div>
-    <div class="box"><h3>Token usage</h3><p>Every session records its requests and tokens locally and prints a short summary when Claude Code exits. <code>wrapper-code usage</code> adds them up by provider, model and day, and <code>wrapper-code usage clear</code> deletes them. Start your own Claude Code with <code>wrapper-code claude</code> and your Anthropic usage is counted too, with nothing else changed. Nothing leaves your machine.</p></div>
-    <div class="box"><h3>Claude accounts</h3><p>Keep several Claude logins side by side: <code>wrapper-code accounts add work</code> logs one in, <code>wrapper-code claude --account work</code> starts it with your usual settings, plugins and MCP servers, and <code>wrapper-code claude --temp</code> logs in for one session only. Plain <code>claude</code> stays on its own login. macOS and Linux.</p></div>
+    <div class="box"><h3>Token usage</h3><p>Each session records its requests and tokens locally. <code>wrapper-code usage</code> adds them up by provider, model and day, <code>wrapper-code usage clear</code> deletes them, and <code>wrapper-code claude</code> counts your Anthropic usage too. Nothing leaves your machine.</p></div>
   </section>
 
   <section id="providers">
