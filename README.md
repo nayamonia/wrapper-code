@@ -36,6 +36,10 @@ wrapper-code kimi-code             # launch Claude Code with your Kimi Code subs
 wrapper-code zai-coding            # launch Claude Code with your Z.ai GLM Coding Plan
 wrapper-code deepseek --resume     # anything after the provider is passed to claude
 wrapper-code claude                # your own Claude Code, unchanged, with its token usage recorded
+wrapper-code accounts add work     # log in another Claude account, kept apart from your usual login
+wrapper-code claude --account work # your Claude Code with that account
+wrapper-code claude --temp         # log in for this session only; logged out and deleted on exit
+wrapper-code accounts              # saved accounts with their e-mail and last use
 wrapper-code setup deepseek        # change the API key or model profile
 wrapper-code list                  # providers by family: billing, status and the selected profile or model
 ```
@@ -134,6 +138,24 @@ Both can be installed at once. wrapper-code does not know about CCR; if a CCR pr
 - Ctrl+C is passed through to `claude`; the wrapper itself keeps running until `claude` exits.
 - If a provider file is broken (for example a pasted bare key), `wrapper-code setup <provider>` replaces it with a fresh one.
 - Before `claude` starts, wrapper-code shows a sub-second 8-bit splash. It only appears on a color terminal at least 72 columns wide. Set `WRAPPER_CODE_NO_SPLASH=1` (or the standard `NO_COLOR`) to skip it.
+
+## Claude accounts
+
+Several Claude logins (Pro, Max, Team or Enterprise) can live side by side, without touching the login of plain `claude`. macOS and Linux only.
+
+- `wrapper-code accounts add <name>` creates an account and runs `claude auth login` for it.
+- `wrapper-code claude --account <name> [claude args...]` starts your Claude Code with that account.
+- `wrapper-code claude --temp [claude args...]` logs in for one session. When it ends, the login is logged out and its folder deleted. If the logout fails, the folder is kept and its path printed; the next `--temp` or `accounts` tries again.
+- `wrapper-code accounts` lists the accounts, and `wrapper-code accounts remove <name>` logs one out and deletes it.
+
+**How the accounts are kept:**
+- Each account is its own `CLAUDE_CONFIG_DIR` under `~/.config/wrapper-code/accounts/`. Claude Code keeps its login there, and on macOS in a Keychain entry of its own.
+- **Shared with your usual Claude Code, by symlink:** everything in `~/.claude`, which covers settings, CLAUDE.md and the files it imports, plugins, skills, agents, commands and hooks. Your user MCP servers are copied from `~/.claude.json` before each session.
+- **Kept per account:** the login, the session history and Claude Code's runtime state.
+
+**Variables that would override the account:** `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN` and the Bedrock, Vertex and Foundry switches are removed from these sessions, and wrapper-code says which ones it removed.
+
+Console sign-ins made without an API key are stored outside the config folder, in `~/.config/anthropic`, and are shared by every account, so they are not supported here.
 
 ## Token usage
 
