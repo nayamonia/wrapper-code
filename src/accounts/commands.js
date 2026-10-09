@@ -1,7 +1,7 @@
 import { stat } from 'node:fs/promises';
 import { validateName, accountDir, createAccountDir, listAccounts, removeAccountDir, accountEmail } from './store.js';
 import { linkShared, syncMcpServers } from './share.js';
-import { sweepTemp } from './temp.js';
+import { sweepTemp, createTempAccount, teardownTemp } from './temp.js';
 import { accountEnv } from './env.js';
 import { readUsage } from '../usage/store.js';
 import { formatTable } from '../list.js';
@@ -150,4 +150,68 @@ export async function runAccountsCommand(args, ctx) {
   if (sub === 'remove') return remove(rest, ctx);
   ctx.stderr.write(USAGE);
   return 1;
+}
+
+// The flags are wrapper-code's only when they come right after `claude`; anything after the
+// first other argument belongs to claude.
+export function parseAccountFlags(args) {
+  let account = null;
+  let temp = false;
+  let i = 0;
+  while (i < args.length) {
+    const a = args[i];
+    if (a === '--temp') {
+      temp = true;
+      i += 1;
+    } else if (a === '--account') {
+      if (i + 1 >= args.length) return { error: '--account needs a name: wrapper-code claude --account <name>' };
+      account = args[i + 1];
+      i += 2;
+    } else if (a.startsWith('--account=')) {
+      account = a.slice('--account='.length);
+      i += 1;
+    } else {
+      break;
+    }
+  }
+  if (account !== null && temp) return { error: 'Use either --account <name> or --temp, not both.' };
+  return { account, temp, rest: args.slice(i) };
+}
+
+function reportEnv({ removed, replacedConfigDir }, stderr) {
+  if (removed.length) stderr.write(`wrapper-code: removed ${removed.join(', ')} from this session so the account's login is used\n`);
+  if (replacedConfigDir) stderr.write('wrapper-code: your CLAUDE_CONFIG_DIR is replaced by the account folder for this session only\n');
+}
+
+export async function prepareAccountSession(flags, childEnv, claudePath, ctx) {
+  const { cfg, home, stdout, stderr, platform } = ctx;
+  if (platform === 'win32') {
+    stderr.write(UNSUPPORTED);
+    return { code: 1 };
+  }
+  if (flags.account !== null) {
+    const accounts = await listAccounts(cfg);
+    const account = accounts.find((a) => a.name === flags.account);
+    if (!account) return unknownAccount(flags.account, accounts, stderr) && { code: 1 };
+    await prepareShared(account.dir, { home, stderr });
+    const built = accountEnv(childEnv, account.dir);
+    reportEnv(built, stderr);
+    return { env: built.env, selection: account.name, teardown: async () => {} };
+  }
+  await cleanupTemps(ctx, claudePath);
+  const dir = await createTempAccount({ tmpRoot: ctx.tmpRoot, pid: process.pid });
+  const teardown = async () => {
+    const { removed } = await teardownTemp(dir, { logout: logoutWith({ authImpl: ctx.authImpl, claudePath, env: ctx.env }) });
+    if (removed) stdout.write('Temporary login removed.\n');
+    else stderr.write(`wrapper-code: the temporary login could not be logged out; its folder is kept at ${dir}. Clear it with: CLAUDE_CONFIG_DIR=${dir} claude auth logout\n`);
+  };
+  try {
+    await prepareShared(dir, { home, stderr });
+  } catch (err) {
+    await teardown();
+    throw err;
+  }
+  const built = accountEnv(childEnv, dir);
+  reportEnv(built, stderr);
+  return { env: built.env, selection: 'temp', teardown };
 }

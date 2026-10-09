@@ -180,3 +180,91 @@ test('accounts add survives Ctrl-C during login, removes the dir and restores si
   await assert.rejects(stat(accountDir('ctrlc', cfg)), { code: 'ENOENT' });
   assert.deepEqual(sigs.map((s) => process.listenerCount(s)), before);
 });
+
+import { parseAccountFlags } from '../src/accounts/commands.js';
+import { readdir as readdirFs } from 'node:fs/promises';
+
+test('parseAccountFlags reads the flags only before the claude args', () => {
+  assert.deepEqual(parseAccountFlags(['--account', 'w', '-p', 'hi']), { account: 'w', temp: false, rest: ['-p', 'hi'] });
+  assert.deepEqual(parseAccountFlags(['--account=w']), { account: 'w', temp: false, rest: [] });
+  assert.deepEqual(parseAccountFlags(['--temp', '--resume']), { account: null, temp: true, rest: ['--resume'] });
+  assert.deepEqual(parseAccountFlags(['-p', '--temp']), { account: null, temp: false, rest: ['-p', '--temp'] });
+  assert.match(parseAccountFlags(['--account']).error, /needs a name/);
+  assert.match(parseAccountFlags(['--account', 'w', '--temp']).error, /not both/);
+});
+
+test('claude --account launches with the account dir, without auth vars, and records the account as selection', { skip: isWin }, async () => {
+  const { home, deps, cfg } = await setup();
+  await createAccountDir(accountDir('trabalho', cfg), { name: 'trabalho', createdAt: 'x', temp: false });
+  const launched = [];
+  const d = deps({
+    env: { ANTHROPIC_API_KEY: 'k', CLAUDE_CODE_USE_BEDROCK: '1', CLAUDE_CONFIG_DIR: '/mine', PATH: '/bin', WRAPPER_CODE_USAGE_LINGER_MS: '1' },
+    launchImpl: async (o) => { launched.push(o); return { code: 0 }; },
+  });
+  assert.equal(await main(['claude', '--account', 'trabalho', '-p', 'hi'], d), 0);
+  const child = launched[0].env;
+  const dir = accountDir('trabalho', cfg);
+  assert.equal(child.CLAUDE_CONFIG_DIR, dir);
+  assert.equal('ANTHROPIC_API_KEY' in child, false);
+  assert.equal('CLAUDE_CODE_USE_BEDROCK' in child, false);
+  assert.deepEqual(launched[0].args, ['-p', 'hi']);
+  assert.equal(await readlink(path.join(dir, 'CLAUDE.md')), path.join(home, '.claude', 'CLAUDE.md'));
+  assert.match(d.stderr.text(), /removed ANTHROPIC_API_KEY, CLAUDE_CODE_USE_BEDROCK/);
+  assert.doesNotMatch(d.stderr.text(), /=k|=1/);
+  assert.match(d.stderr.text(), /CLAUDE_CONFIG_DIR/);
+  assert.match(d.stdout.text(), /wrapper-code · Claude Code \(trabalho\) · /);
+});
+
+test('claude --account with an unknown name fails and lists the accounts; --account with --temp fails', async () => {
+  const { deps, cfg } = await setup();
+  await createAccountDir(accountDir('a1', cfg), { name: 'a1', createdAt: 'x', temp: false });
+  const d = deps({ launchImpl: async () => assert.fail('must not launch') });
+  assert.equal(await main(['claude', '--account', 'nope'], d), 1);
+  assert.match(d.stderr.text(), /Unknown account "nope"\. Accounts: a1\./);
+  const d2 = deps({ launchImpl: async () => assert.fail('must not launch') });
+  assert.equal(await main(['claude', '--account', 'a1', '--temp'], d2), 1);
+});
+
+test('claude --temp runs in a temp dir that is logged out and gone afterwards, keeping claude exit code', { skip: isWin }, async () => {
+  const { tmpRoot, auth, deps } = await setup();
+  let seenDir;
+  const d = deps({
+    env: { WRAPPER_CODE_USAGE_LINGER_MS: '1' },
+    launchImpl: async (o) => { seenDir = o.env.CLAUDE_CONFIG_DIR; assert.ok((await stat(seenDir)).isDirectory()); return { code: 5 }; },
+  });
+  assert.equal(await main(['claude', '--temp'], d), 5);
+  assert.ok(seenDir.startsWith(path.join(tmpRoot, 'wrapper-code-temp-')));
+  assert.deepEqual(auth.map((a) => [a.sub, a.configDir]), [['logout', seenDir]]);
+  await assert.rejects(stat(seenDir), { code: 'ENOENT' });
+  assert.match(d.stdout.text(), /Temporary login removed\./);
+  assert.match(d.stdout.text(), /wrapper-code · Claude Code \(temp\) · /);
+});
+
+test('claude --temp keeps the dir and warns when logout fails', { skip: isWin }, async () => {
+  const { tmpRoot, deps } = await setup();
+  const d = deps({
+    env: { WRAPPER_CODE_USAGE_LINGER_MS: '1' },
+    authImpl: async () => ({ code: 1, timedOut: true }),
+    launchImpl: async () => ({ code: 0 }),
+  });
+  assert.equal(await main(['claude', '--temp'], d), 0);
+  const left = (await readdirFs(tmpRoot)).filter((n) => n.startsWith('wrapper-code-temp-'));
+  assert.equal(left.length, 1);
+  assert.match(d.stderr.text(), /could not be logged out; its folder is kept at .*wrapper-code-temp-/);
+  assert.match(d.stderr.text(), /claude auth logout/);
+});
+
+test('claude --temp still tears down when claude fails to start', { skip: isWin }, async () => {
+  const { tmpRoot, auth, deps } = await setup();
+  const d = deps({ env: { WRAPPER_CODE_USAGE_LINGER_MS: '1' }, launchImpl: async () => ({ code: 1, error: new Error('spawn ENOENT') }) });
+  assert.equal(await main(['claude', '--temp'], d), 1);
+  assert.equal(auth.filter((a) => a.sub === 'logout').length, 1);
+  assert.deepEqual((await readdirFs(tmpRoot)).filter((n) => n.startsWith('wrapper-code-temp-')), []);
+});
+
+test('claude --account and --temp are not supported on Windows; plain claude still is', async () => {
+  const { deps } = await setup();
+  const d = deps({ platform: 'win32', launchImpl: async () => assert.fail('must not launch') });
+  assert.equal(await main(['claude', '--temp'], d), 1);
+  assert.equal(d.stderr.text(), 'Claude accounts are supported on macOS and Linux only.\n');
+});

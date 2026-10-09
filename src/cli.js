@@ -10,7 +10,7 @@ import { resolveClaude, launchClaude } from './launch.js';
 import { openBrowser } from './open.js';
 import { startSetupServer } from './setup/server.js';
 import { creditLine } from './credits.js';
-import { runAccountsCommand } from './accounts/commands.js';
+import { runAccountsCommand, parseAccountFlags, prepareAccountSession } from './accounts/commands.js';
 import { runAuth } from './accounts/auth.js';
 import { pidAlive } from './accounts/temp.js';
 import { showSplash, shouldSplash } from './splash.js';
@@ -236,6 +236,19 @@ export async function main(argv, deps = {}) {
   const provider = resolveProvider(catalog, first);
   if (!provider) return unknown(first);
 
+  // wrapper-code claude --account <name> | --temp: wrapper-code's flags, read before claude's.
+  let args = rest;
+  let accountFlags = null;
+  if (provider.passthrough) {
+    const parsed = parseAccountFlags(rest);
+    if (parsed.error) {
+      stderr.write(`${parsed.error}\n`);
+      return 1;
+    }
+    args = parsed.rest;
+    if (parsed.account !== null || parsed.temp) accountFlags = parsed;
+  }
+
   if (!provider.passthrough) await migrateAliasEnv(provider, cfg);
   let values = provider.passthrough ? {} : await readProviderEnv(provider.id, cfg);
   if (!isConfigured(provider, values)) {
@@ -245,65 +258,79 @@ export async function main(argv, deps = {}) {
     values = await readProviderEnv(provider.id, cfg);
   }
 
-  const childEnv = buildEnv({ provider, fileValues: values, baseEnv: env });
+  let childEnv = buildEnv({ provider, fileValues: values, baseEnv: env });
   const claudePath = resolveClaudeImpl({ platform, env });
   if (!claudePath) {
     stderr.write(INSTALL_HINT);
     return 1;
   }
-  const selection = selectionOf(provider, values);
-
-  // Usage telemetry: a local OTLP receiver for this session.
-  let receiver = null;
-  const sessionId = randomBytes(8).toString('hex');
-  const collected = [];
-  // Inside a wrapper-code session the shell carries the parent's injected receiver vars.
-  // They are ours, not the user's: drop them so this session gets its own receiver.
-  const nested = String(env.OTEL_EXPORTER_OTLP_HEADERS || '').includes(`${USAGE_TOKEN_HEADER}=`);
-  if (nested) for (const key of INJECTED_OTEL_KEYS) delete childEnv[key];
-  const userOtel = (key) => !(nested && INJECTED_OTEL_KEYS.includes(key)) && env[key];
-  if (env.WRAPPER_CODE_NO_USAGE === '1') {
-    // Opted out: inject nothing, print nothing.
-  } else if (userOtel('OTEL_EXPORTER_OTLP_ENDPOINT') || userOtel('OTEL_EXPORTER_OTLP_LOGS_ENDPOINT') || userOtel('CLAUDE_CODE_ENABLE_TELEMETRY')) {
-    stdout.write('usage: your OTEL settings are kept; wrapper-code will not record this session\n');
-  } else {
-    try {
-      const lingerMs = Number(env.WRAPPER_CODE_USAGE_LINGER_MS) || DEFAULT_LINGER_MS;
-      receiver = await startUsageReceiverImpl({
-        lingerMs,
-        onEvent: (raw, ts) => {
-          collected.push({ ts, sessionId, provider: provider.id, selection, ...raw });
-        },
-      });
-      for (const key of Object.keys(childEnv)) if (/^OTEL_EXPORTER_OTLP_LOGS_/.test(key)) delete childEnv[key];
-      Object.assign(childEnv, receiver.env);
-    } catch (err) {
-      stdout.write(`usage: receiver could not start (${err.message}); session runs without usage tracking\n`);
-    }
+  let selection = selectionOf(provider, values);
+  let teardown = null;
+  if (accountFlags) {
+    const session = await prepareAccountSession(accountFlags, childEnv, claudePath, accountCtx);
+    if (session.code !== undefined) return session.code;
+    ({ env: childEnv, selection, teardown } = session);
   }
 
-  let startedAt;
-  let code;
-  let error;
   try {
-    await showSplash({ stdout, env, version: pkg.version, providerName: provider.name, selection, ...(sleepImpl ? { sleep: sleepImpl } : {}) });
-    startedAt = nowImpl();
-    ({ code, error } = await launchImpl({ claudePath, args: rest, env: childEnv }));
-  } catch (err) {
-    // A listening receiver would keep the process alive: close it before propagating.
-    if (receiver) await Promise.resolve().then(() => receiver.close({ now: true })).catch(() => {});
-    throw err;
+    return await runSession({ provider, selection, childEnv, claudePath, args });
+  } finally {
+    if (teardown) await teardown();
   }
-  if (error) stderr.write(`Failed to start claude: ${error.message}\n`);
-  const endedAt = nowImpl();
 
-  if (receiver) {
-    // Usage problems are reported, never allowed to change claude's exit code.
-    try {
-      await finishUsage({ receiver, failedToStart: Boolean(error), collected, cfg, home, provider, selection, startedAt, endedAt, stdout, stderr, env });
-    } catch (err) {
-      try { stderr.write(`usage: ${err?.message ?? String(err)}\n`); } catch { /* nothing left to report to */ }
+  async function runSession({ provider, selection, childEnv, claudePath, args }) {
+    // Usage telemetry: a local OTLP receiver for this session.
+    let receiver = null;
+    const sessionId = randomBytes(8).toString('hex');
+    const collected = [];
+    // Inside a wrapper-code session the shell carries the parent's injected receiver vars.
+    // They are ours, not the user's: drop them so this session gets its own receiver.
+    const nested = String(env.OTEL_EXPORTER_OTLP_HEADERS || '').includes(`${USAGE_TOKEN_HEADER}=`);
+    if (nested) for (const key of INJECTED_OTEL_KEYS) delete childEnv[key];
+    const userOtel = (key) => !(nested && INJECTED_OTEL_KEYS.includes(key)) && env[key];
+    if (env.WRAPPER_CODE_NO_USAGE === '1') {
+      // Opted out: inject nothing, print nothing.
+    } else if (userOtel('OTEL_EXPORTER_OTLP_ENDPOINT') || userOtel('OTEL_EXPORTER_OTLP_LOGS_ENDPOINT') || userOtel('CLAUDE_CODE_ENABLE_TELEMETRY')) {
+      stdout.write('usage: your OTEL settings are kept; wrapper-code will not record this session\n');
+    } else {
+      try {
+        const lingerMs = Number(env.WRAPPER_CODE_USAGE_LINGER_MS) || DEFAULT_LINGER_MS;
+        receiver = await startUsageReceiverImpl({
+          lingerMs,
+          onEvent: (raw, ts) => {
+            collected.push({ ts, sessionId, provider: provider.id, selection, ...raw });
+          },
+        });
+        for (const key of Object.keys(childEnv)) if (/^OTEL_EXPORTER_OTLP_LOGS_/.test(key)) delete childEnv[key];
+        Object.assign(childEnv, receiver.env);
+      } catch (err) {
+        stdout.write(`usage: receiver could not start (${err.message}); session runs without usage tracking\n`);
+      }
     }
+
+    let startedAt;
+    let code;
+    let error;
+    try {
+      await showSplash({ stdout, env, version: pkg.version, providerName: provider.name, selection, ...(sleepImpl ? { sleep: sleepImpl } : {}) });
+      startedAt = nowImpl();
+      ({ code, error } = await launchImpl({ claudePath, args, env: childEnv }));
+    } catch (err) {
+      // A listening receiver would keep the process alive: close it before propagating.
+      if (receiver) await Promise.resolve().then(() => receiver.close({ now: true })).catch(() => {});
+      throw err;
+    }
+    if (error) stderr.write(`Failed to start claude: ${error.message}\n`);
+    const endedAt = nowImpl();
+
+    if (receiver) {
+      // Usage problems are reported, never allowed to change claude's exit code.
+      try {
+        await finishUsage({ receiver, failedToStart: Boolean(error), collected, cfg, home, provider, selection, startedAt, endedAt, stdout, stderr, env });
+      } catch (err) {
+        try { stderr.write(`usage: ${err?.message ?? String(err)}\n`); } catch { /* nothing left to report to */ }
+      }
+    }
+    return code;
   }
-  return code;
 }

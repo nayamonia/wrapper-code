@@ -1191,3 +1191,35 @@ process.exit(0);
   assert.equal(seen.env.CLAUDE_CODE_SUBAGENT_MODEL, 'glm-5.3');
   assert.equal('ANTHROPIC_API_KEY' in seen.env, false);
 });
+
+test('end-to-end: claude --temp gives a real claude a temp CLAUDE_CONFIG_DIR, logs it out and removes it', { skip: isWin }, async () => {
+  const home = await tmp();
+  const tmpRoot = await tmp();
+  const binDir = path.join(home, 'fakebin');
+  await mkdir(binDir);
+  const out = path.join(home, 'out.jsonl');
+  const fake = path.join(binDir, 'claude');
+  await writeFile(fake, `#!/usr/bin/env node
+require('fs').appendFileSync(process.env.FAKE_OUT, JSON.stringify({ argv: process.argv.slice(2), dir: process.env.CLAUDE_CONFIG_DIR, key: process.env.ANTHROPIC_API_KEY || null }) + '\\n');
+process.exit(0);
+`);
+  await chmod(fake, 0o755);
+  const env = {
+    ...shellEnv(),
+    ANTHROPIC_API_KEY: 'sk-shell',
+    WRAPPER_CODE_NO_USAGE: '1',
+    HOME: home,
+    TMPDIR: tmpRoot,
+    XDG_CONFIG_HOME: path.join(home, '.config'),
+    PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
+    FAKE_OUT: out,
+  };
+  const result = await run(['claude', '--temp', '-p', 'hi'], env);
+  assert.equal(result.code, 0, result.stderr);
+  const calls = (await readFile(out, 'utf8')).trim().split('\n').map((l) => JSON.parse(l));
+  assert.deepEqual(calls.map((c) => c.argv), [['-p', 'hi'], ['auth', 'logout']]);
+  assert.equal(calls[0].dir, calls[1].dir);
+  assert.ok(calls[0].dir.includes('wrapper-code-temp-'));
+  assert.equal(calls[0].key, null);
+  assert.deepEqual((await readdir(tmpRoot)).filter((n) => n.startsWith('wrapper-code-temp-')), []);
+});
