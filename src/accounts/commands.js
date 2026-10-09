@@ -201,7 +201,13 @@ export async function prepareAccountSession(flags, childEnv, claudePath, ctx) {
   await cleanupTemps(ctx, claudePath);
   const dir = await createTempAccount({ tmpRoot: ctx.tmpRoot, pid: process.pid });
   const teardown = async () => {
-    const { removed } = await teardownTemp(dir, { logout: logoutWith({ authImpl: ctx.authImpl, claudePath, env: ctx.env }) });
+    let removed;
+    try {
+      ({ removed } = await teardownTemp(dir, { logout: logoutWith({ authImpl: ctx.authImpl, claudePath, env: ctx.env }) }));
+    } catch (err) {
+      stderr.write(`wrapper-code: the temporary login was logged out but its folder could not be deleted (${err.message}): ${dir}\n`);
+      return;
+    }
     if (removed) stdout.write('Temporary login removed.\n');
     else stderr.write(`wrapper-code: the temporary login could not be logged out; its folder is kept at ${dir}. Clear it with: CLAUDE_CONFIG_DIR=${dir} claude auth logout\n`);
   };

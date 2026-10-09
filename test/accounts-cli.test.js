@@ -268,3 +268,19 @@ test('claude --account and --temp are not supported on Windows; plain claude sti
   assert.equal(await main(['claude', '--temp'], d), 1);
   assert.equal(d.stderr.text(), 'Claude accounts are supported on macOS and Linux only.\n');
 });
+
+import { chmod } from 'node:fs/promises';
+
+test('claude --temp keeps claude exit code when the temp folder cannot be deleted', { skip: isWin || process.getuid?.() === 0 }, async () => {
+  const { tmpRoot, deps } = await setup();
+  const d = deps({
+    env: { WRAPPER_CODE_USAGE_LINGER_MS: '1' },
+    launchImpl: async () => { await chmod(tmpRoot, 0o500); return { code: 7 }; },
+  });
+  try {
+    assert.equal(await main(['claude', '--temp'], d), 7);
+    assert.match(d.stderr.text(), /could not be deleted/);
+  } finally {
+    await chmod(tmpRoot, 0o700);
+  }
+});
