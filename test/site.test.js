@@ -15,7 +15,7 @@ test('renderSite builds a self-contained landing page from the brand, the catalo
   assert.match(html, /<link rel="icon" href="data:image\/svg\+xml/);
   assert.match(html, /viewBox="0 0 16 16"/, 'mascot sprite inline');
   assert.match(html, /viewBox="0 0 50 5"/, 'wordmark inline');
-  assert.match(html, /<h1>Any LLM\. Any account\. One Claude Code\.<\/h1>/);
+  assert.match(html, /Run Claude Code with any LLM/);
   assert.match(html, /npm install -g wrapper-code/);
   assert.match(html, /<div class="install" id="install">[^\n]*<span class="p">\$<\/span> wrapper-code deepseek<\/div>/, 'hero example uses deepseek');
   assert.doesNotMatch(html, /<h3>8-bit<\/h3>/, 'no 8-bit card');
