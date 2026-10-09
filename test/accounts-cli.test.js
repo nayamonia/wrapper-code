@@ -240,6 +240,23 @@ test('claude --temp runs in a temp dir that is logged out and gone afterwards, k
   assert.match(d.stdout.text(), /wrapper-code · Claude Code \(temp\) · /);
 });
 
+test('claude --temp swallows stdout/stderr errors for the session and removes the listeners afterwards', { skip: isWin }, async () => {
+  const { tmpRoot, deps } = await setup();
+  const before = [process.stdout.listenerCount('error'), process.stderr.listenerCount('error')];
+  let during;
+  let seenDir;
+  const d = deps({
+    env: { WRAPPER_CODE_USAGE_LINGER_MS: '1' },
+    launchImpl: async (o) => { seenDir = o.env.CLAUDE_CONFIG_DIR; during = [process.stdout.listenerCount('error'), process.stderr.listenerCount('error')]; return { code: 0 }; },
+  });
+  assert.equal(await main(['claude', '--temp'], d), 0);
+  assert.ok(during[0] > before[0]);
+  assert.ok(during[1] > before[1]);
+  assert.deepEqual([process.stdout.listenerCount('error'), process.stderr.listenerCount('error')], before);
+  await assert.rejects(stat(seenDir), { code: 'ENOENT' });
+  assert.deepEqual((await readdirFs(tmpRoot)).filter((n) => n.startsWith('wrapper-code-temp-')), []);
+});
+
 test('claude --temp keeps the dir and warns when logout fails', { skip: isWin }, async () => {
   const { tmpRoot, deps } = await setup();
   const d = deps({

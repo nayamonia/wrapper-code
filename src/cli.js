@@ -272,10 +272,24 @@ export async function main(argv, deps = {}) {
     ({ env: childEnv, selection, teardown } = session);
   }
 
+  // After the terminal hangs up, writing to it can emit EIO; without a listener that would
+  // crash us before the teardown below runs and leave the temporary login behind.
+  const swallow = () => {};
+  if (teardown) {
+    process.stdout.on('error', swallow);
+    process.stderr.on('error', swallow);
+  }
   try {
     return await runSession({ provider, selection, childEnv, claudePath, args });
   } finally {
-    if (teardown) await teardown();
+    if (teardown) {
+      try {
+        await teardown();
+      } finally {
+        process.stdout.removeListener('error', swallow);
+        process.stderr.removeListener('error', swallow);
+      }
+    }
   }
 
   async function runSession({ provider, selection, childEnv, claudePath, args }) {

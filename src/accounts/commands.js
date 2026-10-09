@@ -22,9 +22,9 @@ export async function prepareShared(dir, { home, stderr }) {
 const logoutWith = ({ authImpl, claudePath, env }) => (dir) =>
   authImpl('logout', { claudePath, configDir: dir, env: accountEnv(env, dir).env, timeoutMs: 15000 });
 
-export async function cleanupTemps({ tmpRoot, authImpl, env, pidAliveImpl, stdout }, claudePath) {
+export async function cleanupTemps({ tmpRoot, authImpl, env, pidAliveImpl, stdout, stderr }, claudePath) {
   if (!claudePath) return;
-  const n = await sweepTemp({ tmpRoot, isAlive: pidAliveImpl, logout: logoutWith({ authImpl, claudePath, env }) });
+  const n = await sweepTemp({ tmpRoot, isAlive: pidAliveImpl, logout: logoutWith({ authImpl, claudePath, env }), warn: (msg) => stderr.write(`wrapper-code: ${msg}\n`) });
   if (n) stdout.write(`Cleaned ${n} leftover temporary session(s).\n`);
 }
 

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
-import { mkdtemp, mkdir, stat, readdir } from 'node:fs/promises';
+import { mkdtemp, mkdir, stat, readdir, symlink, chmod, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { runAuth } from '../src/accounts/auth.js';
@@ -83,6 +83,49 @@ test('sweepTemp cleans dead-pid temp dirs only, and ignores unmarked ones', asyn
   assert.deepEqual(loggedOut, [dead]);
   await assert.rejects(stat(dead), { code: 'ENOENT' });
   for (const d of [live, unmarked, notTemp]) assert.ok((await stat(d)).isDirectory(), d);
+});
+
+test('sweepTemp ignores a temp-prefixed symlink to a marked dead-pid dir', { skip: isWin }, async () => {
+  const root = await tmp();
+  const target = await createTempAccount({ tmpRoot: await tmp(), pid: 111 });
+  const link = path.join(root, `${TEMP_PREFIX}planted`);
+  await symlink(target, link);
+  const loggedOut = [];
+  const n = await sweepTemp({ tmpRoot: root, isAlive: () => false, logout: async (d) => { loggedOut.push(d); return { code: 0 }; } });
+  assert.equal(n, 0);
+  assert.deepEqual(loggedOut, []);
+  assert.ok((await stat(target)).isDirectory());
+});
+
+test('sweepTemp ignores a marked dead-pid dir that is group/world accessible', { skip: isWin }, async () => {
+  const root = await tmp();
+  const dir = await createTempAccount({ tmpRoot: root, pid: 111 });
+  await chmod(dir, 0o755);
+  const loggedOut = [];
+  const n = await sweepTemp({ tmpRoot: root, isAlive: () => false, logout: async (d) => { loggedOut.push(d); return { code: 0 }; } });
+  assert.equal(n, 0);
+  assert.deepEqual(loggedOut, []);
+  assert.ok((await stat(dir)).isDirectory());
+});
+
+test('sweepTemp survives an undeletable leftover and still cleans the next one', { skip: isWin || process.getuid?.() === 0 }, async () => {
+  const root = await tmp();
+  const first = await createTempAccount({ tmpRoot: root, pid: 111 });
+  const second = await createTempAccount({ tmpRoot: root, pid: 222 });
+  const sub = path.join(first, 'locked');
+  await mkdir(sub);
+  await writeFile(path.join(sub, 'f'), 'x');
+  await chmod(sub, 0o500);
+  const warnings = [];
+  try {
+    const n = await sweepTemp({ tmpRoot: root, isAlive: () => false, logout: async () => ({ code: 0 }), warn: (m) => warnings.push(m) });
+    assert.equal(n, 1);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /could not clean the leftover temporary session/);
+    await assert.rejects(stat(second), { code: 'ENOENT' });
+  } finally {
+    await chmod(sub, 0o700);
+  }
 });
 
 test('sweepTemp returns 0 when the tmp root is unreadable', async () => {
