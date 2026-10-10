@@ -313,6 +313,10 @@ test('validateProvider accepts optional aliases and rejects malformed ones', () 
 
 async function catalogDir(files) {
   const dir = await mkdtemp(path.join(tmpdir(), 'wc-catalog-'));
+  // Like the real catalog folder, the temp folder sits under a package.json with
+  // "type": "module"; Node 18 has no syntax detection and would read the .js
+  // files as CommonJS without it.
+  await writeFile(path.join(dir, 'package.json'), '{ "type": "module" }\n');
   for (const [name, provider] of Object.entries(files)) {
     await writeFile(path.join(dir, name), `export default ${JSON.stringify(provider)};\n`);
   }
