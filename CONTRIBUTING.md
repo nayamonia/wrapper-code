@@ -19,6 +19,8 @@ npm run site        # regenerates docs/index.html from the catalog
 node bin/wrapper-code.js list
 ```
 
+Every pull request runs `npm test` on GitHub Actions (Node 18, 20 and 22 on Linux, Node 22 on macOS); the same command on your machine tells you the result before you push.
+
 To try your branch as the real command: `npm link`, then `wrapper-code <provider>`. Your config files live in `~/.config/wrapper-code/` (or `%APPDATA%\wrapper-code\`), so a local test uses your real keys; they stay on your machine.
 
 ## Adding a provider
